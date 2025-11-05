@@ -8,8 +8,8 @@
 
 export interface BusinessRuleTemplateParams {
   catalogItemName: string;
-  blockHttpUrl: string;
-  webhookSecret: string;
+  restMessageName: string;
+  restMessageFnName: string;
 }
 
 /**
@@ -23,8 +23,8 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
 (function executeRule(current, previous) {
   'use strict';
 
-  var FLOWS_ENDPOINT = '${params.blockHttpUrl}/request';
-  var WEBHOOK_SECRET = '${params.webhookSecret}';
+  var REST_MESSAGE_NAME = '${params.restMessageName}';
+  var REST_MESSAGE_FN_NAME = '${params.restMessageFnName}';
 
   var COMPLETED_STATE = 3;
   var FAILED_STATE = 4;
@@ -109,16 +109,14 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
   }
 
   /**
-   * Calls the Flows endpoint with the request data
+   * Calls the Flows endpoint with the request data using REST Message
    */
   function callFlowsEndpoint(payload) {
     try {
-      var request = new sn_ws.RESTMessageV2();
-      request.setEndpoint(FLOWS_ENDPOINT);
-      request.setHttpMethod('POST');
-      request.setRequestHeader('Content-Type', 'application/json');
-      request.setRequestHeader('X-Webhook-Secret', WEBHOOK_SECRET);
+      // Use the configured REST Message with stored credentials
+      var request = new sn_ws.RESTMessageV2(REST_MESSAGE_NAME, REST_MESSAGE_FN_NAME);
 
+      // Set the request body
       var body = JSON.stringify(payload);
       request.setRequestBody(body);
 
@@ -136,10 +134,10 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
         body: responseBody
       };
     } catch (e) {
-      logError('Failed to call Flows endpoint: ' + e.message);
+      logError('Failed to call Flows endpoint: ' + e);
       return {
         success: false,
-        error: e.message
+        error: String(e)
       };
     }
   }

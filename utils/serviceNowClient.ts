@@ -11,6 +11,8 @@ export const RESOURCE_TYPES = {
   VARIABLE: "item_option_new",
   QUESTION_CHOICE: "question_choice",
   BUSINESS_RULE: "sys_script",
+  REST_MESSAGE: "sys_rest_message",
+  REST_MESSAGE_FN: "sys_rest_message_fn",
 } as const;
 
 // Variable types in ServiceNow
@@ -57,6 +59,19 @@ export interface BusinessRuleParams {
   name: string;
   catalogItemId: string;
   script: string;
+}
+
+export interface RestMessageParams {
+  name: string;
+  authUser: string;
+  authPassword: string;
+}
+
+export interface RestMessageFunctionParams {
+  restMessageId: string;
+  name: string;
+  endpoint: string;
+  httpMethod: string;
 }
 
 /**
@@ -227,6 +242,41 @@ export function mapVariableType(type: string): ServiceNowVariableType {
   };
 
   return typeMap[type] || ServiceNowVariableType.SINGLE_LINE_TEXT;
+}
+
+/**
+ * Creates a REST Message with Basic Auth credentials
+ * This stores credentials in ServiceNow's credential store, not in scripts
+ */
+export async function createRestMessage(
+  credentials: ServiceNowCredentials,
+  params: RestMessageParams
+): Promise<CreatedResource> {
+  const payload = {
+    name: params.name,
+    use_basic_auth: true,
+    basic_auth_user: params.authUser,
+    basic_auth_password: params.authPassword,
+  };
+
+  return createTableRecord(credentials, RESOURCE_TYPES.REST_MESSAGE, payload);
+}
+
+/**
+ * Creates a REST Message Function (HTTP method configuration for a REST Message)
+ */
+export async function createRestMessageFunction(
+  credentials: ServiceNowCredentials,
+  params: RestMessageFunctionParams
+): Promise<CreatedResource> {
+  const payload = {
+    rest_message: params.restMessageId,
+    function_name: params.name,
+    rest_endpoint: params.endpoint,
+    http_method: params.httpMethod,
+  };
+
+  return createTableRecord(credentials, RESOURCE_TYPES.REST_MESSAGE_FN, payload);
 }
 
 /**

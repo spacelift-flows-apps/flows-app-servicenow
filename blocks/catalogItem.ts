@@ -4,6 +4,8 @@ import {
   createVariable,
   createQuestionChoice,
   createBusinessRule,
+  createRestMessage,
+  createRestMessageFunction,
   deleteTableRecord,
   mapVariableType,
   type CreatedResource,
@@ -148,16 +150,42 @@ export const catalogItem: AppBlock = {
           value: catalogItemResource.id,
         });
 
-        // Generate webhook secret
-        const webhookSecret = generateWebhookSecret();
+        // Generate API credentials for authentication
+        const apiUser = `spacelift_flows_${input.block.id.substring(0, 8)}`;
+        const apiPassword = generateApiPassword();
+
         await kv.block.set({
-          key: "webhookSecret",
-          value: webhookSecret,
+          key: "apiUser",
+          value: apiUser,
+        });
+        await kv.block.set({
+          key: "apiPassword",
+          value: apiPassword,
+        });
+
+        // Create REST Message with credentials
+        const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
+        const restMessageResource = await createRestMessage(credentials, {
+          name: restMessageName,
+          authUser: apiUser,
+          authPassword: apiPassword,
+        });
+
+        await kv.block.set({
+          key: "restMessageName",
+          value: restMessageName,
+        });
+
+        // Store REST Message as a created resource
+        const createdResources = [catalogItemResource, restMessageResource];
+        await kv.block.set({
+          key: "createdResources",
+          value: createdResources,
         });
 
         return {
           newStatus: "in_progress",
-          customStatusDescription: "Catalog item created, configuring variables",
+          customStatusDescription: "Catalog item and REST Message created, configuring variables",
           nextScheduleDelay: 2,
           signalUpdates: {
             catalogItemId: catalogItemResource.id,
@@ -223,22 +251,82 @@ export const catalogItem: AppBlock = {
         };
       }
 
+      // Check if we've created the REST Message Function yet
+      const storedRestMessageFn = await kv.block.get("restMessageFnCreated");
+
+      if (!storedRestMessageFn?.value) {
+        // Get REST Message info
+        const { value: restMessageName } = await kv.block.get("restMessageName");
+        const { value: createdResources } = await kv.block.get("createdResources");
+
+        if (!restMessageName || !createdResources) {
+          throw new Error("REST Message not found");
+        }
+
+        // Find the REST Message ID from created resources
+        const restMessageResource = (createdResources as CreatedResource[]).find(
+          (r) => r.type === "sys_rest_message"
+        );
+
+        if (!restMessageResource) {
+          throw new Error("REST Message resource not found");
+        }
+
+        // Create REST Message Function
+        console.log("Creating REST Message Function");
+        const restMessageFnName = "CallFlows";
+        const restMessageFnResource = await createRestMessageFunction(credentials, {
+          restMessageId: restMessageResource.id,
+          name: restMessageFnName,
+          endpoint: `${input.block.http?.url}/request`,
+          httpMethod: "POST",
+        });
+
+        await kv.block.set({
+          key: "restMessageFnName",
+          value: restMessageFnName,
+        });
+
+        // Add REST Message Function to created resources
+        const updatedResources = [...createdResources, restMessageFnResource];
+        await kv.block.set({
+          key: "createdResources",
+          value: updatedResources,
+        });
+
+        await kv.block.set({
+          key: "restMessageFnCreated",
+          value: true,
+        });
+
+        return {
+          newStatus: "in_progress",
+          customStatusDescription: "REST Message Function created, setting up business rule",
+          nextScheduleDelay: 2,
+          signalUpdates: {
+            catalogItemId: catalogItemId,
+            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemId}`,
+          },
+        };
+      }
+
       // Check if we've created the business rule yet
       const storedBusinessRule = await kv.block.get("businessRuleCreated");
 
       if (!storedBusinessRule?.value) {
-        // Get webhook secret
-        const { value: webhookSecret } = await kv.block.get("webhookSecret");
+        // Get REST Message info
+        const { value: restMessageName } = await kv.block.get("restMessageName");
+        const { value: restMessageFnName } = await kv.block.get("restMessageFnName");
 
-        if (!webhookSecret) {
-          throw new Error("Webhook secret not found");
+        if (!restMessageName || !restMessageFnName) {
+          throw new Error("REST Message information not found");
         }
 
         // Generate business rule script
         const script = generateBusinessRuleScript({
           catalogItemName: catalogItemName as string,
-          blockHttpUrl: input.block.http?.url || "",
-          webhookSecret,
+          restMessageName,
+          restMessageFnName,
         });
 
         // Create business rule
@@ -298,8 +386,12 @@ export const catalogItem: AppBlock = {
       // If no auth, just clean up local state
       await kv.block.delete([
         "catalogItemId",
-        "webhookSecret",
+        "apiUser",
+        "apiPassword",
+        "restMessageName",
+        "restMessageFnName",
         "variablesCreated",
+        "restMessageFnCreated",
         "businessRuleCreated",
         "createdResources",
       ]);
@@ -345,8 +437,12 @@ export const catalogItem: AppBlock = {
       // Clean up local storage
       await kv.block.delete([
         "catalogItemId",
-        "webhookSecret",
+        "apiUser",
+        "apiPassword",
+        "restMessageName",
+        "restMessageFnName",
         "variablesCreated",
+        "restMessageFnCreated",
         "businessRuleCreated",
         "createdResources",
       ]);
@@ -381,14 +477,30 @@ export const catalogItem: AppBlock = {
           return;
         }
 
-        // Validate webhook secret
-        const webhookSecret = request.headers["X-Webhook-Secret"];
-        const { value: storedSecret } = await kv.block.get("webhookSecret");
-
-        if (!webhookSecret || !storedSecret || webhookSecret !== storedSecret) {
+        // Validate Basic Auth
+        const authHeader = request.headers["Authorization"];
+        if (!authHeader || !authHeader.startsWith("Basic ")) {
           await http.respond(request.requestId, {
             statusCode: 401,
-            body: { error: "Invalid webhook secret" },
+            body: { error: "Missing or invalid authentication" },
+          });
+          return;
+        }
+
+        // Decode and validate credentials
+        const base64Credentials = authHeader.substring(6);
+        const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+        const [username, password] = credentials.split(":");
+
+        const [{ value: storedUser }, { value: storedPassword }] = await kv.block.getMany([
+          "apiUser",
+          "apiPassword",
+        ]);
+
+        if (!storedUser || !storedPassword || username !== storedUser || password !== storedPassword) {
+          await http.respond(request.requestId, {
+            statusCode: 401,
+            body: { error: "Invalid credentials" },
           });
           return;
         }
@@ -481,8 +593,15 @@ export const catalogItem: AppBlock = {
 };
 
 /**
- * Generates a secure random webhook secret
+ * Generates a secure random API password
  */
-function generateWebhookSecret(): string {
-  return randomUUID();
+function generateApiPassword(): string {
+  // Generate a secure 32-character password
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+  const randomValues = new Uint8Array(32);
+  crypto.getRandomValues(randomValues);
+
+  return Array.from(randomValues)
+    .map((value) => chars[value % chars.length])
+    .join("");
 }
