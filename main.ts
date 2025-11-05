@@ -24,33 +24,36 @@ export const app = defineApp({
 
   installationInstructions: `To set up this ServiceNow app with OAuth2:
 
-1. **Create OAuth2 Application in ServiceNow**:
-   - Navigate to System OAuth → Application Registry
-   - Click "New" and select "Create an OAuth API endpoint for external clients"
-   - Name: "Spacelift Flows Integration"
-   - Client ID and Client Secret will be generated - copy these
-   - Grant type: Password
-   - Required scopes: Select appropriate scopes for Table API access
+1. **Create OAuth2 Integration in ServiceNow** (New Inbound Integration Experience):
+   - Navigate to **System OAuth → Integrations**
+   - Click **New** to create a new integration
+   - Select **OAuth - Client credentials grant** (for machine-to-machine access)
+   - Fill in the integration details:
+     - **Name**: Spacelift Flows Integration
+     - **Description**: Integration for Spacelift Flows to manage catalog items
+   - Click **Submit**
+   - **Important**: Copy the **Client ID** and **Client Secret** that are generated
 
-2. **Create ServiceNow User with Required Permissions**:
-   - Create a dedicated integration user or use existing account
-   - Required roles:
-     - \`rest_service\` - For REST API access
-     - \`itil\` - For Service Catalog management
-     - \`catalog_admin\` - For creating/managing catalog items
+2. **Configure API Access Scopes**:
+   - On the integration record, scroll to **OAuth Scopes** section
+   - Add the following scopes (or grant admin scope):
+     - \`useraccount\` - For user and role management
+     - \`itil\` - For Service Catalog operations
+   - Alternatively, select **Use all application scopes** for full API access
+   - Save the integration
 
-3. **Configure the Installation**:
+3. **Configure the Flows Installation**:
    - ServiceNow Instance URL: Your instance URL (e.g., https://dev12345.service-now.com)
-   - Client ID: From step 1
-   - Client Secret: From step 1
-   - Username: ServiceNow username
-   - Password: ServiceNow password
-   - Save the configuration
+     - **Important**: No trailing slash!
+   - OAuth2 Client ID: From step 1
+   - OAuth2 Client Secret: From step 1
+   - Click **Confirm** to save
 
 4. **Use the Integration**:
-   - The app will authenticate and provide an access token signal
+   - The app will authenticate using client credentials grant (machine-to-machine)
    - Add "Catalog Item Handler" blocks to create ServiceNow catalog items
-   - Each block creates a catalog item that triggers your Flows when requested`,
+   - Each block creates a catalog item that triggers your Flows when requested
+   - No user account needed - purely API-based authentication`,
 
   config: {
     instanceUrl: {
@@ -61,26 +64,13 @@ export const app = defineApp({
     },
     clientId: {
       name: "OAuth2 Client ID",
-      description: "Client ID from ServiceNow OAuth application",
+      description: "Client ID from ServiceNow OAuth integration",
       type: "string",
       required: true,
     },
     clientSecret: {
       name: "OAuth2 Client Secret",
-      description: "Client Secret from ServiceNow OAuth application",
-      type: "string",
-      required: true,
-      sensitive: true,
-    },
-    username: {
-      name: "ServiceNow Username",
-      description: "ServiceNow user account for API access",
-      type: "string",
-      required: true,
-    },
-    password: {
-      name: "ServiceNow Password",
-      description: "Password for ServiceNow user account",
+      description: "Client Secret from ServiceNow OAuth integration",
       type: "string",
       required: true,
       sensitive: true,
@@ -92,7 +82,7 @@ export const app = defineApp({
       const config = input.app.config;
 
       // Validate required config
-      if (!config.instanceUrl || !config.clientId || !config.clientSecret || !config.username || !config.password) {
+      if (!config.instanceUrl || !config.clientId || !config.clientSecret) {
         return {
           newStatus: "failed",
           customStatusDescription: "Missing required configuration fields",
@@ -188,13 +178,11 @@ async function generateToken(config: any) {
   try {
     const tokenUrl = `${config.instanceUrl}/oauth_token.do`;
 
-    // Build request body for password grant
+    // Build request body for client credentials grant (machine-to-machine)
     const body = new URLSearchParams();
-    body.append("grant_type", "password");
+    body.append("grant_type", "client_credentials");
     body.append("client_id", config.clientId);
     body.append("client_secret", config.clientSecret);
-    body.append("username", config.username);
-    body.append("password", config.password);
 
     // Make token request
     const response = await fetch(tokenUrl, {
