@@ -24,32 +24,41 @@ export const app = defineApp({
 
   installationInstructions: `To set up this ServiceNow app with OAuth2:
 
-1. **Create OAuth2 Integration in ServiceNow** (New Inbound Integration Experience):
+1. **Enable Client Credentials Grant** (REQUIRED - Disabled by Default):
+   - Navigate to **System Properties → OAuth** (or search "sys_properties.list" in filter)
+   - Search for: \`glide.oauth.inbound.client.credential.grant_type.enabled\`
+   - Set value to **true**
+   - Click **Save**
+   - ⚠️ This property is disabled by default on new ServiceNow instances!
+
+2. **Create ServiceNow User for OAuth**:
+   - Navigate to **User Administration → Users**
+   - Create new user (or use existing admin):
+     - **User ID**: spacelift_integration
+     - Add roles: \`rest_service\`, \`itil\`, \`catalog_admin\`, \`admin\`
+   - Click **Submit**
+
+3. **Create OAuth2 Integration in ServiceNow** (New Inbound Integration Experience):
    - Navigate to **System OAuth → Integrations**
    - Click **New** to create a new integration
    - Select **OAuth - Client credentials grant** (for machine-to-machine access)
    - Fill in the integration details:
      - **Name**: Spacelift Flows Integration
-     - **Description**: Integration for Spacelift Flows to manage catalog items
+     - **Default Grant type**: Client Credentials
+     - **OAuth Application User**: ⚠️ Select the user from step 2 - REQUIRED!
+     - **Accessible from**: All application scopes
+     - **Active**: ✓ (checked)
    - Click **Submit**
    - **Important**: Copy the **Client ID** and **Client Secret** that are generated
 
-2. **Configure API Access Scopes**:
-   - On the integration record, scroll to **OAuth Scopes** section
-   - Add the following scopes (or grant admin scope):
-     - \`useraccount\` - For user and role management
-     - \`itil\` - For Service Catalog operations
-   - Alternatively, select **Use all application scopes** for full API access
-   - Save the integration
-
-3. **Configure the Flows Installation**:
+4. **Configure the Flows Installation**:
    - ServiceNow Instance URL: Your instance URL (e.g., https://dev12345.service-now.com)
      - **Important**: No trailing slash!
-   - OAuth2 Client ID: From step 1
-   - OAuth2 Client Secret: From step 1
+   - OAuth2 Client ID: From step 3
+   - OAuth2 Client Secret: From step 3
    - Click **Confirm** to save
 
-4. **Use the Integration**:
+5. **Use the Integration**:
    - The app will authenticate using client credentials grant (machine-to-machine)
    - Add "Catalog Item Handler" blocks to create ServiceNow catalog items
    - Each block creates a catalog item that triggers your Flows when requested

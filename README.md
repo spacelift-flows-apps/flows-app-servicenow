@@ -1,327 +1,311 @@
-# Flows App Template (Core)
+# ServiceNow Flows App
 
-A template repository for creating new core Flows apps with best practices and CI/CD built-in.
+Integrate ServiceNow Service Catalog with Spacelift Flows. Create catalog items that trigger Flows workflows when users request services.
+
+## Features
+
+- **OAuth2 Client Credentials**: Modern machine-to-machine authentication
+- **Dynamic Catalog Items**: Create ServiceNow catalog items with custom variables
+- **Secure Authentication**: Uses ServiceNow REST Messages to store credentials securely
+- **Request Automation**: Automatically triggers Flows when catalog items are requested
+- **Status Updates**: Update ServiceNow request status from your Flows
 
 ## Quick Start
 
-1. **Use this template** - Click "Use this template" button to create a new repository
-2. **Run setup** - `npm run setup` to customize placeholders automatically
-3. **Implement your logic** - Add blocks and customize configuration
-4. **Set up CI/CD** - Configure branch protection and deployment
-5. **Release** - Tag and release your app
+### 0. Enable Client Credentials Grant (REQUIRED FIRST!)
 
-## Template Structure
+⚠️ **This is disabled by default in ServiceNow and WILL cause 401 errors if not enabled!**
 
-```text
-├── .github/workflows/ci.yml  # CI/CD pipeline
-├── .gitignore                # Git ignore rules
-├── package.json              # Dependencies and scripts
-├── tsconfig.json             # TypeScript configuration
-├── main.ts                   # App definition
-├── types.ts                  # Type definitions
-├── blocks/                   # Block implementations
-│   ├── index.ts              # Block registry and exports
-│   └── exampleBlock.ts       # Example block implementation
-├── setup.sh                  # Automated setup script
-└── README.md                 # This file
-```
+1. Navigate to **System Properties → OAuth** (or type `sys_properties.list` in filter navigator)
+2. Search for property: `glide.oauth.inbound.client.credential.grant_type.enabled`
+3. Set the value to **true**
+4. Click **Save**
 
-## Customization Guide
+**Quick way to find it**:
+- Filter navigator → type `sys_properties.list` → Enter
+- Use browser Ctrl+F to search for "client.credential" on the page
+- Or add filter: "Name" "contains" "oauth.inbound.client"
 
-### 1. Replace Placeholders
+### 1. Create ServiceNow User for OAuth
 
-Find and replace these placeholders throughout the codebase:
+ServiceNow requires an "OAuth Application User" even for client credentials grant. This user's permissions determine what the API can do.
 
-- `ServiceNow` - Your app name (e.g., "Slack Integration")
-- `Use Flows to build ServiceNow Catalog items.` - Brief description of your app
+1. Navigate to **User Administration → Users**
+2. Click **New** to create a user
+3. Fill in:
+   - **User ID**: `spacelift_integration` (or your choice)
+   - **First name**: Spacelift
+   - **Last name**: Integration
+   - **Email**: Your email
+   - **Password**: Set any password (won't be used for auth, but required by ServiceNow)
+4. Click **Submit**
+5. On the user record, scroll to **Roles** section
+6. Click **Edit** and add these roles:
+   - `rest_service` - For REST API access
+   - `itil` - For Service Catalog operations
+   - `catalog_admin` - For managing catalog items
+   - `admin` - For creating business rules and REST messages
+7. Click **Save**
 
-**Files to update:**
+### 2. Create OAuth Integration in ServiceNow
 
-- `package.json` - name and description fields
-- `main.ts` - app name and description
-- `types.ts` - JSDoc comments
-- `README.md` - update this file
+1. Navigate to **System OAuth → Integrations**
+2. Click **New**
+3. Select **OAuth - Client credentials grant** (for machine-to-machine access)
+4. Fill in:
+   - **Name**: Spacelift Flows Integration
+   - **Default Grant type**: Client Credentials
+   - **OAuth Application User**: ⚠️ **REQUIRED** - Select the user from step 1
+   - **Accessible from**: All application scopes
+   - **Active**: ✓ Check this box
+5. Click **Submit**
+6. **Important**: Copy the **Client ID** and **Client Secret** that are generated
 
-### 2. Customize Configuration
+### 3. Install and Configure in Flows
 
-In `main.ts`, modify the `config` object:
+1. Add the ServiceNow app in Flows
+2. Configure:
+   - **ServiceNow Instance URL**: `https://dev12345.service-now.com` (no trailing slash!)
+   - **OAuth2 Client ID**: From step 2
+   - **OAuth2 Client Secret**: From step 2
+3. Click **Confirm**
+4. Wait for app to sync to "Ready" status
 
-```typescript
-config: {
-  type: "object",
-  properties: {
-    apiKey: {
-      type: "string",
-      title: "API Key",
-      description: "Your service API key",
-      secret: true  // This makes it a password field
-    },
-    baseUrl: {
-      type: "string",
-      title: "Base URL",
-      description: "API base URL",
-      default: "https://api.example.com"
-    }
-  },
-  required: ["apiKey"]  // Required fields
-}
-```
+### 4. Create a Catalog Item Handler Block
 
-### 3. Implement Your Blocks
+1. Add **Catalog Item Handler** block to your flow
+2. Configure:
+   - **Catalog Item Name**: e.g., "Request Development Server"
+   - **Description**: Brief description
+   - **Variables**: Define form fields (see example below)
+3. Confirm and wait for block to sync
 
-The template includes a clean block structure. Blocks are organized in the `blocks/` directory:
+### 5. Test in ServiceNow
 
-#### Adding a New Block
+1. Go to ServiceNow **Self-Service → Service Catalog**
+2. Find your catalog item
+3. Fill out the form and submit
+4. Check Flows for the triggered event
 
-1. **Create the block file** (e.g., `blocks/myNewBlock.ts`):
-
-```typescript
-import { AppBlock, EventInput } from "@slflows/sdk";
-
-export const myNewBlock: AppBlock = {
-  name: "Your Action Name",
-  description: "What your block does",
-  category: "Your Category",
-
-  inputs: {
-    default: {
-      name: "Input Name",
-      description: "What users need to provide",
-      config: {
-        // Define your input schema here
-        type: "object",
-        properties: {
-          message: {
-            type: "string",
-            title: "Message",
-            description: "Input description",
-          },
-        },
-        required: ["message"],
-      },
-      onEvent: async (input: EventInput, { events }) => {
-        // Your logic here
-        const message = input.params.message as string;
-        const apiKey = input.app.config.apiKey as string;
-
-        // Call your external API, process data, etc.
-
-        // Just emit the result directly - don't wrap in success object
-        await events.emit({
-          result: "your result",
-        });
-      },
-    },
-  },
-
-  outputs: {
-    default: {
-      name: "Output Name",
-      description: "What your block returns",
-      default: true,
-      type: {
-        // Define your output schema here
-        type: "object",
-        properties: {
-          result: { type: "string" },
-        },
-        required: ["result"],
-      } as any,
-    },
-  },
-};
-```
-
-2. **Register the block** in `blocks/index.ts`:
-
-```typescript
-import { myNewBlock } from "./myNewBlock.ts";
-
-export const blocks = {
-  example: exampleBlock,
-  myNew: myNewBlock, // Add your block here
-} as const;
-
-export { myNewBlock }; // Export for external use
-```
-
-That's it! The block will automatically be included in your app since `main.ts` uses `blocks` directly as an object.
-
-## Development
-
-### Prerequisites
-
-- Node.js 20+
-- npm
-
-### Setup
-
-```bash
-npm install
-npm run setup        # Interactive setup to customize template
-```
-
-### Available Scripts
-
-```bash
-npm run setup        # Customize template placeholders
-npm run typecheck    # Type checking
-npm run format       # Code formatting
-npm run bundle       # Create deployment bundle
-```
-
-### Testing Your App
-
-1. Run type checking: `npm run typecheck`
-2. Format code: `npm run format`
-3. Create bundle: `npm run bundle`
-
-**Note**: Initial `npm run typecheck` will show SDK import errors until you customize the template. This is expected - the SDK will be available when the app runs in the Flows environment.
-
-## CI/CD Pipeline
-
-The template includes a complete CI/CD pipeline in `.github/workflows/ci.yml`:
-
-### Continuous Integration
-
-- **Triggers**: All branch pushes (except main)
-- **Steps**: Type check, format validation, bundling
-- **Quality Gates**: Must pass all checks to merge
-
-### Automated Releases
-
-- **Triggers**: Semver tags (v1.0.0, v2.1.3, etc.)
-- **Process**:
-  1. Runs full CI validation
-  2. Creates GitHub release with bundle
-  3. Updates version registry (`versions.json`)
-  4. Pushes registry to main branch
-
-### Version Registry
-
-The pipeline automatically maintains a `versions.json` file:
+## Example Variables Configuration
 
 ```json
-{
-  "versions": [
-    {
-      "version": "1.0.0",
-      "artifactUrl": "https://github.com/user/repo/releases/download/v1.0.0/bundle.tar.gz",
-      "artifactChecksum": "sha256:abc123..."
-    }
-  ]
-}
+[
+  {
+    "name": "server_name",
+    "type": "string",
+    "label": "Server Name",
+    "description": "Name for the server",
+    "required": true
+  },
+  {
+    "name": "environment",
+    "type": "select",
+    "label": "Environment",
+    "required": true,
+    "options": ["Development", "Staging", "Production"]
+  },
+  {
+    "name": "cpu_count",
+    "type": "number",
+    "label": "CPU Cores",
+    "required": true,
+    "default": "2"
+  },
+  {
+    "name": "notes",
+    "type": "text",
+    "label": "Notes",
+    "required": false
+  }
+]
 ```
-
-## Repository Setup
-
-### 1. Branch Protection (Recommended)
-
-Configure branch protection for `main`:
-
-- Require pull request reviews
-- Require status checks (CI)
-- Allow GitHub Actions bot to bypass (for version registry updates)
-
-### 2. Repository Settings
-
-- Enable "Template repository" if this will be reused
-- Configure secrets if needed for external services
-- Set up branch protection rules
-
-## Deployment
-
-### Creating Releases
-
-1. **Ensure main is clean**: All changes merged and CI passing
-2. **Create and push tag**:
-
-   ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
-   ```
-
-3. **Automated process**: CI creates release and updates registry
-4. **Verify**: Check GitHub releases and `versions.json` in main
-
-### Versioning
-
-Follow [Semantic Versioning](https://semver.org/):
-
-- `v1.0.0` - Major release (breaking changes)
-- `v1.1.0` - Minor release (new features)
-- `v1.0.1` - Patch release (bug fixes)
-
-## Best Practices
-
-### Code Organization
-
-- Keep `main.ts` focused on app definition
-- Use `types.ts` for all TypeScript definitions
-- Document your blocks and configuration clearly
-
-### Error Handling
-
-- Let errors bubble up naturally - don't catch and wrap them
-- Use descriptive error messages
-- The framework will handle error catching and reporting
-
-### Security
-
-- Mark sensitive config fields as `secret: true`
-- Never log API keys or sensitive data
-- Validate all inputs
-
-### Testing
-
-- Test your blocks manually before releasing
-- Verify configuration schema works as expected
-- Test the complete deployment pipeline
 
 ## Troubleshooting
 
-### Common Issues
+### OAuth Token Error: 401 access_denied
 
-**CI fails on format check**
+**Symptoms**: App fails to sync with error: `Token request failed with status 401: {"error_description":"access_denied","error":"server_error"}`
+
+**Root Causes (in order of likelihood)**:
+
+1. **⚠️ Client Credentials Grant Not Enabled** (MOST COMMON):
+   - ServiceNow shows: "The following property is currently disabled: 'glide.oauth.inbound.client.credential.grant_type.enabled'"
+   - **Fix**: Enable the property (see Step 0 above)
+
+2. **⚠️ OAuth Application User Not Set**:
+   - The OAuth integration has an empty "OAuth Application User" field
+   - **Fix**: Edit the OAuth integration and select a user from the dropdown
+
+3. **User Lacks Permissions**:
+   - The OAuth Application User doesn't have required roles
+   - **Fix**: Add roles to the user (rest_service, itil, catalog_admin, admin)
+
+4. **Integration Not Active**:
+   - The "Active" checkbox is unchecked
+   - **Fix**: Edit the integration and check "Active"
+
+**Debugging Steps**:
+
+1. **Check Flows Logs** - Now includes detailed debugging:
+   ```
+   Attempting OAuth token request to: https://...
+   Using client_id: 2bd83f32...
+   Request body: grant_type=client_credentials&client_id=...&client_secret=***
+   Content-Type: application/x-www-form-urlencoded
+   [Either "Token request successful" or error details]
+   ```
+
+2. **Verify OAuth Integration**:
+   - Go to **System OAuth → Integrations**
+   - Find your integration
+   - Verify ALL of these:
+     - ✅ Status: **Active**
+     - ✅ Grant type: **Client credentials**
+     - ✅ OAuth Application User: **Set to a user**
+     - ✅ Accessible from: **All application scopes**
+
+3. **Test OAuth Manually** (using the exact credentials):
+   ```bash
+   curl -X POST https://yourinstance.service-now.com/oauth_token.do \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=client_credentials&client_id=YOUR_CLIENT_ID&client_secret=YOUR_CLIENT_SECRET"
+   ```
+
+   Should return:
+   ```json
+   {
+     "access_token": "...",
+     "scope": "",
+     "token_type": "Bearer",
+     "expires_in": 1799
+   }
+   ```
+
+### Catalog Item Not Visible
+
+**Check**:
+1. Go to **Service Catalog → Catalog Items** in ServiceNow
+2. Search for your catalog item name
+3. Verify it exists and is **Active**
+4. Check the **Category** field - if it's in a specific category, navigate to that category in the catalog
+
+### Catalog Item Request Doesn't Trigger Flows
+
+**Debugging**:
+
+1. **Check Business Rule**:
+   - Go to **System Definition → Business Rules**
+   - Search for "Spacelift Flows"
+   - Open your business rule
+   - Verify:
+     - Status is **Active**
+     - When: **async**
+     - Table: **sc_req_item**
+     - Condition contains your catalog item ID
+
+2. **Check Business Rule Execution**:
+   - Go to **System Logs → System Log → All**
+   - Filter by "Spacelift Flows" in the message
+   - Look for log entries when you submit a catalog item request
+   - Check for errors
+
+3. **Verify REST Message**:
+   - Go to **System Web Services → Outbound → REST Messages**
+   - Find the message starting with `Spacelift_Flows_`
+   - Open it and check:
+     - Authentication: Basic Auth is configured
+     - Credentials are set
+   - Check the **HTTP Methods** tab:
+     - Endpoint URL should point to your Flows block
+
+4. **Test REST Message Manually**:
+   - Open the REST Message
+   - Go to **HTTP Methods** tab
+   - Click on the function
+   - Click **Test** link
+   - Check if it can reach the Flows endpoint
+
+### Block Fails to Sync
+
+**Check Logs**: Look for specific errors in the block logs:
+- "Authentication failed" - Check app-level OAuth config
+- "Failed to create catalog item" - Check ServiceNow permissions
+- "Failed to create business rule" - User needs admin role
+
+**Verify Permissions**: The OAuth Application User needs roles to:
+- Create catalog items (`sc_cat_item`)
+- Create variables (`item_option_new`)
+- Create business rules (`sys_script`)
+- Create REST messages (`sys_rest_message`)
+
+## Architecture
+
+### Authentication Flow
+1. App uses OAuth2 Client Credentials Grant
+2. Requests access token from ServiceNow
+3. Uses token for all API operations
+4. Token refreshed automatically every 10 minutes
+
+### Catalog Item Creation Flow
+1. Block creates catalog item via ServiceNow Table API
+2. Creates variables (form fields) for the catalog item
+3. Creates REST Message with Basic Auth credentials (stored securely)
+4. Creates REST Message Function pointing to block endpoint
+5. Creates Business Rule that triggers on item submission
+6. Business Rule uses REST Message to call Flows (no secrets in script!)
+
+### Request Processing Flow
+1. User submits catalog item in ServiceNow
+2. Business Rule triggers and extracts variables
+3. Business Rule calls Flows block endpoint via REST Message
+4. Flows validates Basic Auth and emits event
+5. Your flow processes the event
+6. (Optional) Flow updates request status in ServiceNow
+
+## Security
+
+- **OAuth2**: Modern client credentials grant
+- **Secrets in REST Message**: Credentials stored in ServiceNow's credential store, not in scripts
+- **Basic Auth**: Block endpoint validates incoming requests
+- **Per-block credentials**: Each block gets unique API credentials
+
+## Variable Types
+
+Supported variable types:
+- `string` - Single line text
+- `text` - Multi-line text area
+- `boolean` - Checkbox
+- `number` - Number input (rendered as text field in ServiceNow)
+- `select` - Dropdown with predefined options
+- `password` - Masked password field
+
+## Blocks
+
+### Catalog Item Handler
+
+Creates a ServiceNow catalog item with custom variables. When users request the item in ServiceNow, triggers a Flows event.
+
+**Signals**:
+- `catalogItemId` - ServiceNow sys_id of the created catalog item
+- `catalogItemUrl` - Direct URL to view/edit the catalog item
+
+**Output**: Emits event with request details and all form variables
+
+### Update Request Status
+
+Updates a ServiceNow request item status and adds comments.
+
+**States**: PENDING, WORK_IN_PROGRESS, COMPLETED, FAILED, CANCELLED
+
+**Outputs**:
+- `default` - Success output
+- `error` - Error output
+
+## Development
 
 ```bash
+npm install
+npm run typecheck
 npm run format
-git add .
-git commit -m "Fix formatting"
 ```
-
-**Bundle creation fails**
-
-- Check TypeScript errors: `npm run typecheck`
-- Verify all imports are correct
-- Ensure `main.ts` exports default app
-
-**Release creation fails**
-
-- Verify branch protection allows GitHub Actions bot
-- Check repository permissions
-- Ensure tag follows semver format (v1.0.0)
-
-**Version registry not updating**
-
-- Check GitHub Actions bot has push access to main
-- Verify workflow permissions in repository settings
-- Check for conflicts in versions.json
-
-## Template Checklist
-
-When creating a new app from this template:
-
-- [ ] Run `npm install && npm run setup` for automated setup
-- [ ] Customize app configuration schema in `main.ts`
-- [ ] Implement your block logic in `blocks/`
-- [ ] Update block names, descriptions, and categories
-- [ ] Define proper input/output schemas
-- [ ] Test locally with `npm run typecheck` and `npm run bundle`
-- [ ] Update this README with app-specific information
-- [ ] Set up repository branch protection
-- [ ] Create first release with `git tag v1.0.0`
-
----
-
-**Template Version**: 1.0.0
