@@ -7,6 +7,7 @@ import {
   createRestMessage,
   createRestMessageFunction,
   deleteTableRecord,
+  lookupCategoryByName,
   mapVariableType,
   type CreatedResource,
   type ServiceNowCredentials,
@@ -43,10 +44,11 @@ export const catalogItem: AppBlock = {
       required: false,
     },
     category: {
-      name: "ServiceNow Category",
-      description: "Category sys_id in ServiceNow (optional, but recommended for better organization in the catalog)",
+      name: "Category",
+      description: "ServiceNow category name or sys_id (e.g., 'Services', 'Hardware'). Will be looked up automatically if a name is provided.",
       type: "string",
       required: false,
+      default: "Services",
     },
     variables: {
       name: "Variables",
@@ -157,16 +159,39 @@ export const catalogItem: AppBlock = {
       console.log(`Creating catalog item: ${catalogItemName}`);
       const createdResources: CreatedResource[] = [];
 
-      // 1. Create catalog item
+      // 1. Look up category sys_id if category name provided
+      let categorySysId = "";
+      const categoryNameOrId = (category as string) || "Services"; // Default to "Services"
+
+      if (categoryNameOrId) {
+        console.log(`Looking up category: ${categoryNameOrId}`);
+        // First try to use it as-is (in case user provided sys_id directly)
+        // If it looks like a sys_id (32 chars hex), use directly
+        if (/^[a-f0-9]{32}$/i.test(categoryNameOrId)) {
+          categorySysId = categoryNameOrId;
+          console.log(`Using provided category sys_id: ${categorySysId}`);
+        } else {
+          // Look up by name
+          const lookedUpSysId = await lookupCategoryByName(credentials, categoryNameOrId);
+          if (lookedUpSysId) {
+            categorySysId = lookedUpSysId;
+            console.log(`✓ Category "${categoryNameOrId}" found: ${categorySysId}`);
+          } else {
+            console.warn(`Category "${categoryNameOrId}" not found, creating without category`);
+          }
+        }
+      }
+
+      // 2. Create catalog item
       const catalogItemResource = await createCatalogItem(credentials, {
         name: catalogItemName as string,
         description: catalogItemDescription as string,
-        category: category as string,
+        category: categorySysId,
       });
       createdResources.push(catalogItemResource);
       console.log(`✓ Catalog item created: ${catalogItemResource.id}`);
 
-      // 2. Generate API credentials and create REST Message
+      // 3. Generate API credentials and create REST Message
       const apiUser = `spacelift_flows_${input.block.id.substring(0, 8)}`;
       const apiPassword = generateApiPassword();
       const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
@@ -180,7 +205,7 @@ export const catalogItem: AppBlock = {
       createdResources.push(restMessageResource);
       console.log(`✓ REST Message created: ${restMessageResource.id}`);
 
-      // 3. Create REST Message Function
+      // 4. Create REST Message Function
       const restMessageFnName = "CallFlows";
       console.log(`Creating REST Message Function: ${restMessageFnName}`);
       const restMessageFnResource = await createRestMessageFunction(credentials, {
@@ -192,7 +217,7 @@ export const catalogItem: AppBlock = {
       createdResources.push(restMessageFnResource);
       console.log(`✓ REST Message Function created: ${restMessageFnResource.id}`);
 
-      // 4. Create variables
+      // 5. Create variables
       console.log(`Creating ${(variables as CatalogVariable[]).length} variables`);
       for (const variable of variables as CatalogVariable[]) {
         const variableResource = await createVariable(credentials, {
@@ -219,7 +244,7 @@ export const catalogItem: AppBlock = {
       }
       console.log(`✓ Created ${(variables as CatalogVariable[]).length} variables`);
 
-      // 5. Create business rule
+      // 6. Create business rule
       console.log("Creating business rule");
       const script = generateBusinessRuleScript({
         catalogItemName: catalogItemName as string,

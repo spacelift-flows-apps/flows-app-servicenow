@@ -154,6 +154,42 @@ export async function deleteTableRecord(
 }
 
 /**
+ * Looks up a catalog category by name to get its sys_id
+ */
+export async function lookupCategoryByName(
+  credentials: ServiceNowCredentials,
+  categoryName: string
+): Promise<string | null> {
+  if (!categoryName) {
+    return null;
+  }
+
+  const url = `${credentials.instanceUrl}/api/now/table/sc_category?sysparm_query=title=${encodeURIComponent(categoryName)}&sysparm_limit=1`;
+
+  const response = await fetch(url, {
+    method: "GET",
+    headers: {
+      Authorization: `Bearer ${credentials.accessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  if (!response.ok) {
+    console.warn(`Failed to lookup category "${categoryName}": ${response.status}`);
+    return null;
+  }
+
+  const data = await response.json();
+
+  if (data.result && data.result.length > 0) {
+    return data.result[0].sys_id;
+  }
+
+  console.warn(`Category "${categoryName}" not found in ServiceNow`);
+  return null;
+}
+
+/**
  * Creates a catalog item in ServiceNow
  */
 export async function createCatalogItem(
@@ -164,7 +200,7 @@ export async function createCatalogItem(
     name: params.name,
     description: params.description || "",
     short_description: params.description || "",
-    category: params.category || "", // Optional - items can exist without category
+    category: params.category || "", // Should be sys_id (use lookupCategoryByName to convert name to sys_id)
     active: true, // Make active immediately
     available: true, // Make available for ordering
     no_quantity_v2: true, // Don't ask for quantity
