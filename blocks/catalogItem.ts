@@ -210,7 +210,9 @@ export const catalogItem: AppBlock = {
         // Create variables for the catalog item
         console.log(`Creating ${(variables as CatalogVariable[]).length} variables`);
 
-        const createdResources: CreatedResource[] = [];
+        // Load existing created resources (catalog item and REST Message)
+        const { value: existingResources } = await kv.block.get("createdResources");
+        const createdResources: CreatedResource[] = [...(existingResources || [])];
 
         for (const variable of variables as CatalogVariable[]) {
           const variableResource = await createVariable(credentials, {
@@ -237,7 +239,7 @@ export const catalogItem: AppBlock = {
           }
         }
 
-        // Store created resources
+        // Store updated created resources
         await kv.block.set({
           key: "createdResources",
           value: createdResources,
