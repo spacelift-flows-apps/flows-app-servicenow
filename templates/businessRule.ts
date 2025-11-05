@@ -26,7 +26,6 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
   var REST_MESSAGE_NAME = '${params.restMessageName}';
   var REST_MESSAGE_FN_NAME = '${params.restMessageFnName}';
 
-  var COMPLETED_STATE = 3;
   var FAILED_STATE = 4;
 
   /**
@@ -148,14 +147,16 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
   function updateRequestItem(requestItem, success, message) {
     try {
       if (success) {
-        requestItem.state = COMPLETED_STATE;
-        requestItem.comments = 'Request processed successfully by Spacelift Flows';
+        // Don't change state - leave as PENDING (1)
+        requestItem.comments = 'Request submitted to Spacelift Flows for processing';
+        requestItem.work_notes = 'Waiting for workflow to process. Use the Update Request Status block to update status.';
+        requestItem.update();
       } else {
         requestItem.state = FAILED_STATE;
-        requestItem.comments = 'Failed to process request: ' + message;
+        requestItem.comments = 'Failed to submit request to Spacelift Flows: ' + message;
         requestItem.work_notes = 'Error details: ' + message;
+        requestItem.update();
       }
-      requestItem.update();
     } catch (e) {
       logError('Failed to update request item: ' + e.message);
     }
@@ -181,11 +182,11 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
     var result = callFlowsEndpoint(payload);
 
     if (result.success) {
-      logInfo('Request processed successfully');
+      logInfo('Request submitted to Flows successfully');
       updateRequestItem(current, true, 'Success');
     } else {
       var errorMsg = result.error || 'HTTP ' + result.statusCode + ': ' + result.body;
-      logError('Request processing failed: ' + errorMsg);
+      logError('Failed to submit request to Flows: ' + errorMsg);
       updateRequestItem(current, false, errorMsg);
     }
 

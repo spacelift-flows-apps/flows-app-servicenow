@@ -28,7 +28,10 @@ export const updateRequest: AppBlock = {
         state: {
           name: "State",
           description: "New state for the request item",
-          type: "string",
+          type: {
+            type: "string",
+            enum: ["PENDING", "WORK_IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"],
+          },
           required: true,
           default: "COMPLETED",
         },
