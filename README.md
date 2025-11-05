@@ -32,8 +32,8 @@ A template repository for creating new core Flows apps with best practices and C
 
 Find and replace these placeholders throughout the codebase:
 
-- `{{APP_NAME}}` - Your app name (e.g., "Slack Integration")
-- `{{APP_DESCRIPTION}}` - Brief description of your app
+- `ServiceNow` - Your app name (e.g., "Slack Integration")
+- `Use Flows to build ServiceNow Catalog items.` - Brief description of your app
 
 **Files to update:**
 

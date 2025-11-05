@@ -23,12 +23,12 @@ echo "📝 Customizing template..."
 # Replace placeholders in files
 if [[ "$OSTYPE" == "darwin"* ]]; then
     # macOS
-    sed -i '' "s/{{APP_NAME}}/$APP_NAME/g" package.json main.ts types.ts README.md
-    sed -i '' "s/{{APP_DESCRIPTION}}/$APP_DESCRIPTION/g" package.json main.ts types.ts README.md
+    sed -i '' "s/{{APP_NAME}}/$APP_NAME/g" package.json main.ts README.md
+    sed -i '' "s/{{APP_DESCRIPTION}}/$APP_DESCRIPTION/g" package.json main.ts README.md
 else
     # Linux
-    sed -i "s/{{APP_NAME}}/$APP_NAME/g" package.json main.ts types.ts README.md
-    sed -i "s/{{APP_DESCRIPTION}}/$APP_DESCRIPTION/g" package.json main.ts types.ts README.md
+    sed -i "s/{{APP_NAME}}/$APP_NAME/g" package.json main.ts README.md
+    sed -i "s/{{APP_DESCRIPTION}}/$APP_DESCRIPTION/g" package.json main.ts README.md
 fi
 
 echo "✅ Placeholders replaced"

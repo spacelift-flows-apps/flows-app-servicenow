@@ -2,9 +2,9 @@ import { defineApp } from "@slflows/sdk/v1";
 import { blocks } from "./blocks/index";
 
 export const app = defineApp({
-  name: "{{APP_NAME}}",
+  name: "ServiceNow",
   installationInstructions:
-    "{{APP_DESCRIPTION}}\n\nTo install:\n1. Add your API key\n2. Configure the base URL if needed\n3. Start using the blocks in your flows",
+    "Use Flows to build ServiceNow Catalog items.\n\nTo install:\n1. Add your API key\n2. Configure the base URL if needed\n3. Start using the blocks in your flows",
 
   blocks,
 
