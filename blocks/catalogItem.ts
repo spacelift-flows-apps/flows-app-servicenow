@@ -139,245 +139,119 @@ export const catalogItem: AppBlock = {
         accessToken: accessToken as string,
       };
 
-      // Check if catalog item already exists
+      // Check if already fully set up
       const storedCatalogItemId = await kv.block.get("catalogItemId");
 
-      if (!storedCatalogItemId?.value) {
-        // Create new catalog item
-        console.log(`Creating catalog item: ${catalogItemName}`);
-
-        const catalogItemResource = await createCatalogItem(credentials, {
-          name: catalogItemName as string,
-          description: catalogItemDescription as string,
-          category: category as string,
-        });
-
-        // Store the catalog item ID
-        await kv.block.set({
-          key: "catalogItemId",
-          value: catalogItemResource.id,
-        });
-
-        // Generate API credentials for authentication
-        const apiUser = `spacelift_flows_${input.block.id.substring(0, 8)}`;
-        const apiPassword = generateApiPassword();
-
-        await kv.block.set({
-          key: "apiUser",
-          value: apiUser,
-        });
-        await kv.block.set({
-          key: "apiPassword",
-          value: apiPassword,
-        });
-
-        // Create REST Message with credentials
-        const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
-        const restMessageResource = await createRestMessage(credentials, {
-          name: restMessageName,
-          authUser: apiUser,
-          authPassword: apiPassword,
-        });
-
-        await kv.block.set({
-          key: "restMessageName",
-          value: restMessageName,
-        });
-
-        // Store REST Message as a created resource
-        const createdResources = [catalogItemResource, restMessageResource];
-        await kv.block.set({
-          key: "createdResources",
-          value: createdResources,
-        });
-
-        return {
-          newStatus: "in_progress",
-          customStatusDescription: "Catalog item and REST Message created, configuring variables",
-          nextScheduleDelay: 2,
-          signalUpdates: {
-            catalogItemId: catalogItemResource.id,
-            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemResource.id}`,
-          },
-        };
-      }
-
-      // Check if we've created variables yet
-      const storedVariables = await kv.block.get("variablesCreated");
-      const catalogItemId = storedCatalogItemId.value;
-
-      if (!storedVariables?.value) {
-        // Create variables for the catalog item
-        console.log(`Creating ${(variables as CatalogVariable[]).length} variables`);
-
-        // Load existing created resources (catalog item and REST Message)
-        const { value: existingResources } = await kv.block.get("createdResources");
-        const createdResources: CreatedResource[] = [...(existingResources || [])];
-
-        for (const variable of variables as CatalogVariable[]) {
-          const variableResource = await createVariable(credentials, {
-            catalogItemId: catalogItemId,
-            name: variable.name,
-            type: mapVariableType(variable.type),
-            label: variable.label,
-            description: variable.description,
-            required: variable.required,
-            defaultValue: variable.default,
-          });
-
-          createdResources.push(variableResource);
-
-          // Create question choices for select variables
-          if (variable.type === "select" && variable.options && variable.options.length > 0) {
-            for (const option of variable.options) {
-              const choiceResource = await createQuestionChoice(credentials, {
-                questionId: variableResource.id,
-                value: option,
-              });
-              createdResources.push(choiceResource);
-            }
-          }
-        }
-
-        // Store updated created resources
-        await kv.block.set({
-          key: "createdResources",
-          value: createdResources,
-        });
-
-        await kv.block.set({
-          key: "variablesCreated",
-          value: true,
-        });
-
-        return {
-          newStatus: "in_progress",
-          customStatusDescription: "Variables created, setting up business rule",
-          nextScheduleDelay: 2,
-          signalUpdates: {
-            catalogItemId: catalogItemId,
-            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemId}`,
-          },
-        };
-      }
-
-      // Check if we've created the REST Message Function yet
-      const storedRestMessageFn = await kv.block.get("restMessageFnCreated");
-
-      if (!storedRestMessageFn?.value) {
-        // Get REST Message info
-        const { value: restMessageName } = await kv.block.get("restMessageName");
-        const { value: createdResources } = await kv.block.get("createdResources");
-
-        if (!restMessageName || !createdResources) {
-          throw new Error("REST Message not found");
-        }
-
-        // Find the REST Message ID from created resources
-        const restMessageResource = (createdResources as CreatedResource[]).find(
-          (r) => r.type === "sys_rest_message"
-        );
-
-        if (!restMessageResource) {
-          throw new Error("REST Message resource not found");
-        }
-
-        // Create REST Message Function
-        console.log("Creating REST Message Function");
-        const restMessageFnName = "CallFlows";
-        const restMessageFnResource = await createRestMessageFunction(credentials, {
-          restMessageId: restMessageResource.id,
-          name: restMessageFnName,
-          endpoint: `${input.block.http?.url}/request`,
-          httpMethod: "POST",
-        });
-
-        await kv.block.set({
-          key: "restMessageFnName",
-          value: restMessageFnName,
-        });
-
-        // Add REST Message Function to created resources
-        const updatedResources = [...createdResources, restMessageFnResource];
-        await kv.block.set({
-          key: "createdResources",
-          value: updatedResources,
-        });
-
-        await kv.block.set({
-          key: "restMessageFnCreated",
-          value: true,
-        });
-
-        return {
-          newStatus: "in_progress",
-          customStatusDescription: "REST Message Function created, setting up business rule",
-          nextScheduleDelay: 2,
-          signalUpdates: {
-            catalogItemId: catalogItemId,
-            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemId}`,
-          },
-        };
-      }
-
-      // Check if we've created the business rule yet
-      const storedBusinessRule = await kv.block.get("businessRuleCreated");
-
-      if (!storedBusinessRule?.value) {
-        // Get REST Message info
-        const { value: restMessageName } = await kv.block.get("restMessageName");
-        const { value: restMessageFnName } = await kv.block.get("restMessageFnName");
-
-        if (!restMessageName || !restMessageFnName) {
-          throw new Error("REST Message information not found");
-        }
-
-        // Generate business rule script
-        const script = generateBusinessRuleScript({
-          catalogItemName: catalogItemName as string,
-          restMessageName,
-          restMessageFnName,
-        });
-
-        // Create business rule
-        console.log("Creating business rule");
-
-        const businessRuleResource = await createBusinessRule(credentials, {
-          name: `Spacelift Flows - ${catalogItemName}`,
-          catalogItemId: catalogItemId,
-          script,
-        });
-
-        // Add business rule to created resources
-        const { value: createdResources } = await kv.block.get("createdResources");
-        const updatedResources = [...(createdResources || []), businessRuleResource];
-
-        await kv.block.set({
-          key: "createdResources",
-          value: updatedResources,
-        });
-
-        await kv.block.set({
-          key: "businessRuleCreated",
-          value: true,
-        });
-
+      if (storedCatalogItemId?.value) {
+        // Already set up, just return ready
         return {
           newStatus: "ready",
-          customStatusDescription: "Catalog item fully configured and ready",
           signalUpdates: {
-            catalogItemId: catalogItemId,
-            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemId}`,
+            catalogItemId: storedCatalogItemId.value,
+            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${storedCatalogItemId.value}`,
           },
         };
       }
 
-      // Everything is already set up
+      // Create all resources in one pass
+      console.log(`Creating catalog item: ${catalogItemName}`);
+      const createdResources: CreatedResource[] = [];
+
+      // 1. Create catalog item
+      const catalogItemResource = await createCatalogItem(credentials, {
+        name: catalogItemName as string,
+        description: catalogItemDescription as string,
+        category: category as string,
+      });
+      createdResources.push(catalogItemResource);
+      console.log(`✓ Catalog item created: ${catalogItemResource.id}`);
+
+      // 2. Generate API credentials and create REST Message
+      const apiUser = `spacelift_flows_${input.block.id.substring(0, 8)}`;
+      const apiPassword = generateApiPassword();
+      const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
+
+      console.log(`Creating REST Message: ${restMessageName}`);
+      const restMessageResource = await createRestMessage(credentials, {
+        name: restMessageName,
+        authUser: apiUser,
+        authPassword: apiPassword,
+      });
+      createdResources.push(restMessageResource);
+      console.log(`✓ REST Message created: ${restMessageResource.id}`);
+
+      // 3. Create REST Message Function
+      const restMessageFnName = "CallFlows";
+      console.log(`Creating REST Message Function: ${restMessageFnName}`);
+      const restMessageFnResource = await createRestMessageFunction(credentials, {
+        restMessageId: restMessageResource.id,
+        name: restMessageFnName,
+        endpoint: `${input.block.http?.url}/request`,
+        httpMethod: "POST",
+      });
+      createdResources.push(restMessageFnResource);
+      console.log(`✓ REST Message Function created: ${restMessageFnResource.id}`);
+
+      // 4. Create variables
+      console.log(`Creating ${(variables as CatalogVariable[]).length} variables`);
+      for (const variable of variables as CatalogVariable[]) {
+        const variableResource = await createVariable(credentials, {
+          catalogItemId: catalogItemResource.id,
+          name: variable.name,
+          type: mapVariableType(variable.type),
+          label: variable.label,
+          description: variable.description,
+          required: variable.required,
+          defaultValue: variable.default,
+        });
+        createdResources.push(variableResource);
+
+        // Create question choices for select variables
+        if (variable.type === "select" && variable.options && variable.options.length > 0) {
+          for (const option of variable.options) {
+            const choiceResource = await createQuestionChoice(credentials, {
+              questionId: variableResource.id,
+              value: option,
+            });
+            createdResources.push(choiceResource);
+          }
+        }
+      }
+      console.log(`✓ Created ${(variables as CatalogVariable[]).length} variables`);
+
+      // 5. Create business rule
+      console.log("Creating business rule");
+      const script = generateBusinessRuleScript({
+        catalogItemName: catalogItemName as string,
+        restMessageName,
+        restMessageFnName,
+      });
+
+      const businessRuleResource = await createBusinessRule(credentials, {
+        name: `Spacelift Flows - ${catalogItemName}`,
+        catalogItemId: catalogItemResource.id,
+        script,
+      });
+      createdResources.push(businessRuleResource);
+      console.log(`✓ Business rule created: ${businessRuleResource.id}`);
+
+      // Store everything
+      await kv.block.setMany([
+        { key: "catalogItemId", value: catalogItemResource.id },
+        { key: "apiUser", value: apiUser },
+        { key: "apiPassword", value: apiPassword },
+        { key: "restMessageName", value: restMessageName },
+        { key: "restMessageFnName", value: restMessageFnName },
+        { key: "createdResources", value: createdResources },
+      ]);
+
+      console.log("✓ Catalog item fully configured and ready");
+
       return {
         newStatus: "ready",
         signalUpdates: {
-          catalogItemId: catalogItemId,
-          catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemId}`,
+          catalogItemId: catalogItemResource.id,
+          catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${catalogItemResource.id}`,
         },
       };
     } catch (error: any) {
@@ -401,9 +275,6 @@ export const catalogItem: AppBlock = {
         "apiPassword",
         "restMessageName",
         "restMessageFnName",
-        "variablesCreated",
-        "restMessageFnCreated",
-        "businessRuleCreated",
         "createdResources",
       ]);
       return {
@@ -452,9 +323,6 @@ export const catalogItem: AppBlock = {
         "apiPassword",
         "restMessageName",
         "restMessageFnName",
-        "variablesCreated",
-        "restMessageFnCreated",
-        "businessRuleCreated",
         "createdResources",
       ]);
 
