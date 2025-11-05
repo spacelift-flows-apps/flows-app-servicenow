@@ -44,7 +44,7 @@ export const catalogItem: AppBlock = {
     },
     category: {
       name: "ServiceNow Category",
-      description: "Category sys_id in ServiceNow (optional)",
+      description: "Category sys_id in ServiceNow (optional, but recommended for better organization in the catalog)",
       type: "string",
       required: false,
     },

@@ -164,7 +164,9 @@ export async function createCatalogItem(
     name: params.name,
     description: params.description || "",
     short_description: params.description || "",
-    category: params.category || "",
+    category: params.category || "", // Optional - items can exist without category
+    active: true, // Make active immediately
+    available: true, // Make available for ordering
     no_quantity_v2: true, // Don't ask for quantity
     no_delivery_time_v2: true, // Don't show delivery time
   };
