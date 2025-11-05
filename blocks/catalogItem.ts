@@ -116,12 +116,20 @@ export const catalogItem: AppBlock = {
 
   async onSync(input) {
     const { catalogItemName, catalogItemDescription, category, variables } = input.block.config;
-    const { instanceUrl, accessToken } = input.app.signals;
+    const { accessToken } = input.app.signals;
+    const instanceUrl = input.app.config.instanceUrl;
 
     if (!accessToken) {
       return {
         newStatus: "failed",
         customStatusDescription: "App not authenticated - check app configuration",
+      };
+    }
+
+    if (!instanceUrl) {
+      return {
+        newStatus: "failed",
+        customStatusDescription: "ServiceNow instance URL not configured",
       };
     }
 
@@ -380,7 +388,8 @@ export const catalogItem: AppBlock = {
   },
 
   async onDrain(input) {
-    const { instanceUrl, accessToken } = input.app.signals;
+    const { accessToken } = input.app.signals;
+    const instanceUrl = input.app.config.instanceUrl;
 
     if (!accessToken) {
       // If no auth, just clean up local state

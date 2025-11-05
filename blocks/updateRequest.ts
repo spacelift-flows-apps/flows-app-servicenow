@@ -47,10 +47,15 @@ export const updateRequest: AppBlock = {
       },
       onEvent: async (input) => {
         const { requestItemId, state, comments, workNotes } = input.event.inputConfig;
-        const { instanceUrl, accessToken } = input.app.signals;
+        const { accessToken } = input.app.signals;
+        const instanceUrl = input.app.config.instanceUrl;
 
         if (!accessToken) {
           throw new Error("App not authenticated - check app configuration");
+        }
+
+        if (!instanceUrl) {
+          throw new Error("ServiceNow instance URL not configured");
         }
 
         if (!requestItemId) {
