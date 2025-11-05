@@ -36,12 +36,14 @@ export const catalogItem: AppBlock = {
       description: "Name of the catalog item in ServiceNow",
       type: "string",
       required: true,
+      fixed: true,
     },
     catalogItemDescription: {
       name: "Description",
       description: "Description of the catalog item",
       type: "string",
       required: false,
+      fixed: true,
     },
     category: {
       name: "Category",
@@ -49,10 +51,12 @@ export const catalogItem: AppBlock = {
       type: "string",
       required: false,
       default: "Services",
+      fixed: true,
     },
     variables: {
       name: "Variables",
       description: "Variables/parameters for the catalog item",
+      fixed: true,
       type: {
         type: "array",
         items: {
