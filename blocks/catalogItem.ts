@@ -488,6 +488,39 @@ export const catalogItem: AppBlock = {
           return;
         }
 
+        // Update the request item in ServiceNow to show it was received
+        const requestItemId = payload.metadata.requestItemId;
+        const accessToken = input.app.signals.accessToken;
+        const instanceUrl = input.app.config.instanceUrl;
+
+        if (accessToken && instanceUrl && requestItemId) {
+          try {
+            const updateUrl = `${instanceUrl}/api/now/table/sc_req_item/${requestItemId}`;
+            const updateResponse = await fetch(updateUrl, {
+              method: "PATCH",
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                "Content-Type": "application/json",
+                Accept: "application/json",
+              },
+              body: JSON.stringify({
+                comments: "Request received by Spacelift Flows for processing",
+              }),
+            });
+
+            if (!updateResponse.ok) {
+              console.warn(
+                `Failed to update ServiceNow request item ${requestItemId}: ${updateResponse.status}`
+              );
+            } else {
+              console.log(`✓ Added comment to ServiceNow request item ${requestItemId}`);
+            }
+          } catch (error: any) {
+            console.warn(`Failed to update ServiceNow request item: ${error.message}`);
+            // Don't fail the whole request if the update fails
+          }
+        }
+
         // Respond quickly to ServiceNow
         await http.respond(request.requestId, {
           statusCode: 200,

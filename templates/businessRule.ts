@@ -147,10 +147,11 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
   function updateRequestItem(requestItem, success, message) {
     try {
       if (success) {
-        // Don't change state - leave as PENDING (1)
-        requestItem.comments = 'Request submitted to Spacelift Flows for processing';
-        requestItem.update();
+        // Don't update the request item on success
+        // Flows will update it via API with proper authentication context
+        logInfo('Request successfully submitted to Flows');
       } else {
+        // Only update on failure - if Flows endpoint is unreachable
         requestItem.state = FAILED_STATE;
         requestItem.comments = 'Failed to submit request to Spacelift Flows: ' + message;
         requestItem.work_notes = 'Error details: ' + message;
