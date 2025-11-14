@@ -1,4 +1,10 @@
-import { defineApp, kv, lifecycle, AppInput, AppLifecycleCallbackOutput } from "@slflows/sdk/v1";
+import {
+  defineApp,
+  kv,
+  lifecycle,
+  AppInput,
+  AppLifecycleCallbackOutput,
+} from "@slflows/sdk/v1";
 import { blocks } from "./blocks/index";
 
 // Key value store keys
@@ -17,7 +23,8 @@ export const app = defineApp({
   signals: {
     accessToken: {
       name: "Access Token",
-      description: "ServiceNow OAuth2 access token for authenticated API requests",
+      description:
+        "ServiceNow OAuth2 access token for authenticated API requests",
       sensitive: true,
     },
   },
@@ -63,7 +70,8 @@ export const app = defineApp({
   config: {
     instanceUrl: {
       name: "ServiceNow Instance URL",
-      description: "Your ServiceNow instance URL (e.g., https://dev12345.service-now.com)",
+      description:
+        "Your ServiceNow instance URL (e.g., https://dev12345.service-now.com)",
       type: "string",
       required: true,
     },
@@ -112,7 +120,8 @@ export const app = defineApp({
         },
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       console.error("Failed to sync ServiceNow app:", errorMessage);
 
       return {
@@ -161,14 +170,13 @@ export const app = defineApp({
 // Helper Functions
 
 async function shouldRefreshToken(config: any): Promise<boolean> {
-  const [{ value: expiresAt }, { value: previousChecksum }] = await kv.app.getMany([
-    KV_KEYS.EXPIRES_AT,
-    KV_KEYS.CONFIG_CHECKSUM,
-  ]);
+  const [{ value: expiresAt }, { value: previousChecksum }] =
+    await kv.app.getMany([KV_KEYS.EXPIRES_AT, KV_KEYS.CONFIG_CHECKSUM]);
 
   // Check if config changed
   const currentChecksum = await generateChecksum(config);
-  const configChanged = !previousChecksum || currentChecksum !== previousChecksum;
+  const configChanged =
+    !previousChecksum || currentChecksum !== previousChecksum;
 
   // Check if token expired or close to expiring
   const now = Date.now();
@@ -201,7 +209,9 @@ async function generateToken(config: any) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Token request failed with status ${response.status}: ${errorText}`);
+      throw new Error(
+        `Token request failed with status ${response.status}: ${errorText}`,
+      );
     }
 
     const tokenResponse = await response.json();
@@ -211,7 +221,9 @@ async function generateToken(config: any) {
     }
 
     // Calculate expiration time
-    const expiresIn = tokenResponse.expires_in ? parseInt(tokenResponse.expires_in, 10) : 3600; // Default to 1 hour
+    const expiresIn = tokenResponse.expires_in
+      ? parseInt(tokenResponse.expires_in, 10)
+      : 3600; // Default to 1 hour
     const expiresAt = Date.now() + expiresIn * 1000;
 
     // Store config checksum
@@ -226,7 +238,10 @@ async function generateToken(config: any) {
       expiresAt,
     };
   } catch (error) {
-    console.error("ServiceNow token generation failed:", error instanceof Error ? error.message : String(error));
+    console.error(
+      "ServiceNow token generation failed:",
+      error instanceof Error ? error.message : String(error),
+    );
     throw error;
   }
 }

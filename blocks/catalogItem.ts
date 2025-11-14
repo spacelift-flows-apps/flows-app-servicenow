@@ -30,7 +30,10 @@ interface CatalogVariable {
  * Otherwise, executes the callback, stores the result, and returns it.
  * This makes onSync resilient to crashes - on retry, already-completed steps are skipped.
  */
-async function syncStep<T>(key: string, callback: () => Promise<T>): Promise<T> {
+async function syncStep<T>(
+  key: string,
+  callback: () => Promise<T>,
+): Promise<T> {
   const stored = await kv.block.get(key);
 
   if (stored?.value !== undefined) {
@@ -48,7 +51,8 @@ async function syncStep<T>(key: string, callback: () => Promise<T>): Promise<T> 
 
 export const catalogItem: AppBlock = {
   name: "Catalog Item",
-  description: "Creates a ServiceNow catalog item that triggers Flows when requested",
+  description:
+    "Creates a ServiceNow catalog item that triggers Flows when requested",
   category: "Service Catalog",
 
   config: {
@@ -68,7 +72,8 @@ export const catalogItem: AppBlock = {
     },
     category: {
       name: "Category",
-      description: "ServiceNow category name or sys_id (e.g., 'Services', 'Hardware'). Will be looked up automatically if a name is provided.",
+      description:
+        "ServiceNow category name or sys_id (e.g., 'Services', 'Hardware'). Will be looked up automatically if a name is provided.",
       type: "string",
       required: false,
       default: "Services",
@@ -76,7 +81,8 @@ export const catalogItem: AppBlock = {
     },
     variables: {
       name: "Variables",
-      description: "Variables/parameters for the catalog item. Type can be one of `\"string\"`, `\"text\"`, `\"boolean\"`, `\"number\"`, `\"select\"`, or `\"password\"`.",
+      description:
+        'Variables/parameters for the catalog item. Type can be one of `"string"`, `"text"`, `"boolean"`, `"number"`, `"select"`, or `"password"`.',
       fixed: true,
       type: {
         type: "array",
@@ -89,7 +95,14 @@ export const catalogItem: AppBlock = {
             },
             type: {
               type: "string",
-              enum: ["string", "text", "boolean", "number", "select", "password"],
+              enum: [
+                "string",
+                "text",
+                "boolean",
+                "number",
+                "select",
+                "password",
+              ],
               description: "Variable type",
             },
             label: {
@@ -142,14 +155,16 @@ export const catalogItem: AppBlock = {
   },
 
   async onSync(input) {
-    const { catalogItemName, catalogItemDescription, category, variables } = input.block.config;
+    const { catalogItemName, catalogItemDescription, category, variables } =
+      input.block.config;
     const { accessToken } = input.app.signals;
     const instanceUrl = input.app.config.instanceUrl;
 
     if (!accessToken) {
       return {
         newStatus: "failed",
-        customStatusDescription: "App not authenticated - check app configuration",
+        customStatusDescription:
+          "App not authenticated - check app configuration",
       };
     }
 
@@ -180,46 +195,57 @@ export const catalogItem: AppBlock = {
       }
 
       // Look up by name
-      const lookedUpSysId = await lookupCategoryByName(credentials, categoryNameOrId);
+      const lookedUpSysId = await lookupCategoryByName(
+        credentials,
+        categoryNameOrId,
+      );
       if (lookedUpSysId) {
         console.log(`✓ Category "${categoryNameOrId}" found: ${lookedUpSysId}`);
         return lookedUpSysId;
       }
 
-      console.warn(`Category "${categoryNameOrId}" not found, creating without category`);
+      console.warn(
+        `Category "${categoryNameOrId}" not found, creating without category`,
+      );
       return "";
     });
 
     // 2. Create catalog item (idempotent)
-    const catalogItemResource = await syncStep<CreatedResource>("catalogItemResource", async () => {
-      return await createCatalogItem(credentials, {
-        name: catalogItemName as string,
-        description: catalogItemDescription as string,
-        category: categorySysId,
-      });
-    });
+    const catalogItemResource = await syncStep<CreatedResource>(
+      "catalogItemResource",
+      async () => {
+        return await createCatalogItem(credentials, {
+          name: catalogItemName as string,
+          description: catalogItemDescription as string,
+          category: categorySysId,
+        });
+      },
+    );
 
     // 3. Generate API credentials (idempotent)
-    const { apiUser, apiPassword } = await syncStep<{ apiUser: string; apiPassword: string }>(
-      "apiCredentials",
-      async () => {
-        return {
-          apiUser: `spacelift_flows_${input.block.id.substring(0, 8)}`,
-          apiPassword: generateApiPassword(),
-        };
-      }
-    );
+    const { apiUser, apiPassword } = await syncStep<{
+      apiUser: string;
+      apiPassword: string;
+    }>("apiCredentials", async () => {
+      return {
+        apiUser: `spacelift_flows_${input.block.id.substring(0, 8)}`,
+        apiPassword: generateApiPassword(),
+      };
+    });
 
     const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
 
     // 4. Create REST Message (idempotent)
-    const restMessageResource = await syncStep<CreatedResource>("restMessageResource", async () => {
-      return await createRestMessage(credentials, {
-        name: restMessageName,
-        authUser: apiUser,
-        authPassword: apiPassword,
-      });
-    });
+    const restMessageResource = await syncStep<CreatedResource>(
+      "restMessageResource",
+      async () => {
+        return await createRestMessage(credentials, {
+          name: restMessageName,
+          authUser: apiUser,
+          authPassword: apiPassword,
+        });
+      },
+    );
 
     // 5. Create REST Message Function (idempotent)
     const restMessageFnName = "CallFlows";
@@ -232,7 +258,7 @@ export const catalogItem: AppBlock = {
           endpoint: `${input.block.http?.url}/request`,
           httpMethod: "POST",
         });
-      }
+      },
     );
 
     // 6. Create variables (idempotent for each variable)
@@ -254,12 +280,16 @@ export const catalogItem: AppBlock = {
             required: variable.required,
             defaultValue: variable.default,
           });
-        }
+        },
       );
       variableResources.push(variableResource);
 
       // Create question choices for select variables (idempotent for each choice)
-      if (variable.type === "select" && variable.options && variable.options.length > 0) {
+      if (
+        variable.type === "select" &&
+        variable.options &&
+        variable.options.length > 0
+      ) {
         for (let j = 0; j < variable.options.length; j++) {
           const option = variable.options[j];
           const choiceResource = await syncStep<CreatedResource>(
@@ -269,7 +299,7 @@ export const catalogItem: AppBlock = {
                 questionId: variableResource.id,
                 value: option,
               });
-            }
+            },
           );
           variableResources.push(choiceResource);
         }
@@ -277,19 +307,22 @@ export const catalogItem: AppBlock = {
     }
 
     // 7. Create business rule (idempotent)
-    const businessRuleResource = await syncStep<CreatedResource>("businessRuleResource", async () => {
-      const script = generateBusinessRuleScript({
-        catalogItemName: catalogItemName as string,
-        restMessageName,
-        restMessageFnName,
-      });
+    const businessRuleResource = await syncStep<CreatedResource>(
+      "businessRuleResource",
+      async () => {
+        const script = generateBusinessRuleScript({
+          catalogItemName: catalogItemName as string,
+          restMessageName,
+          restMessageFnName,
+        });
 
-      return await createBusinessRule(credentials, {
-        name: `Spacelift Flows - ${catalogItemName}`,
-        catalogItemId: catalogItemResource.id,
-        script,
-      });
-    });
+        return await createBusinessRule(credentials, {
+          name: `Spacelift Flows - ${catalogItemName}`,
+          catalogItemId: catalogItemResource.id,
+          script,
+        });
+      },
+    );
 
     // Build complete list of created resources for cleanup
     const createdResources: CreatedResource[] = [
@@ -384,17 +417,23 @@ export const catalogItem: AppBlock = {
     // Delete all created resources (idempotent)
     if (createdResources && Array.isArray(createdResources)) {
       for (const resource of createdResources) {
-        await syncStep<boolean>(`deleted-${resource.type}-${resource.id}`, async () => {
-          try {
-            await deleteTableRecord(credentials, resource.type, resource.id);
-            console.log(`✓ Deleted resource ${resource.type}/${resource.id}`);
-            return true;
-          } catch (error) {
-            console.warn(`Failed to delete resource ${resource.type}/${resource.id}:`, error);
-            // Return true anyway - resource might already be deleted or doesn't exist
-            return true;
-          }
-        });
+        await syncStep<boolean>(
+          `deleted-${resource.type}-${resource.id}`,
+          async () => {
+            try {
+              await deleteTableRecord(credentials, resource.type, resource.id);
+              console.log(`✓ Deleted resource ${resource.type}/${resource.id}`);
+              return true;
+            } catch (error) {
+              console.warn(
+                `Failed to delete resource ${resource.type}/${resource.id}:`,
+                error,
+              );
+              // Return true anyway - resource might already be deleted or doesn't exist
+              return true;
+            }
+          },
+        );
       }
     }
 
@@ -406,7 +445,10 @@ export const catalogItem: AppBlock = {
           console.log(`✓ Deleted catalog item ${catalogItemId}`);
           return true;
         } catch (error) {
-          console.warn(`Failed to delete catalog item ${catalogItemId}:`, error);
+          console.warn(
+            `Failed to delete catalog item ${catalogItemId}:`,
+            error,
+          );
           // Return true anyway - might already be deleted
           return true;
         }
@@ -432,7 +474,6 @@ export const catalogItem: AppBlock = {
         catalogItemUrl: null,
       },
     };
-
   },
 
   http: {
@@ -461,15 +502,20 @@ export const catalogItem: AppBlock = {
 
         // Decode and validate credentials
         const base64Credentials = authHeader.substring(6);
-        const credentials = Buffer.from(base64Credentials, "base64").toString("utf-8");
+        const credentials = Buffer.from(base64Credentials, "base64").toString(
+          "utf-8",
+        );
         const [username, password] = credentials.split(":");
 
-        const [{ value: storedUser }, { value: storedPassword }] = await kv.block.getMany([
-          "apiUser",
-          "apiPassword",
-        ]);
+        const [{ value: storedUser }, { value: storedPassword }] =
+          await kv.block.getMany(["apiUser", "apiPassword"]);
 
-        if (!storedUser || !storedPassword || username !== storedUser || password !== storedPassword) {
+        if (
+          !storedUser ||
+          !storedPassword ||
+          username !== storedUser ||
+          password !== storedPassword
+        ) {
           await http.respond(request.requestId, {
             statusCode: 401,
             body: { error: "Invalid credentials" },
@@ -510,13 +556,17 @@ export const catalogItem: AppBlock = {
 
             if (!updateResponse.ok) {
               console.warn(
-                `Failed to update ServiceNow request item ${requestItemId}: ${updateResponse.status}`
+                `Failed to update ServiceNow request item ${requestItemId}: ${updateResponse.status}`,
               );
             } else {
-              console.log(`✓ Added comment to ServiceNow request item ${requestItemId}`);
+              console.log(
+                `✓ Added comment to ServiceNow request item ${requestItemId}`,
+              );
             }
           } catch (error: any) {
-            console.warn(`Failed to update ServiceNow request item: ${error.message}`);
+            console.warn(
+              `Failed to update ServiceNow request item: ${error.message}`,
+            );
             // Don't fail the whole request if the update fails
           }
         }
@@ -602,7 +652,8 @@ export const catalogItem: AppBlock = {
  */
 function generateApiPassword(): string {
   // Generate a secure 32-character password
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
   const randomValues = new Uint8Array(32);
   crypto.getRandomValues(randomValues);
 

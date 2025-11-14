@@ -15,7 +15,9 @@ export interface BusinessRuleTemplateParams {
 /**
  * Generates the business rule script for ServiceNow
  */
-export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): string {
+export function generateBusinessRuleScript(
+  params: BusinessRuleTemplateParams,
+): string {
   return `// Spacelift Flows Integration - Auto-generated Business Rule
 // Catalog Item: ${params.catalogItemName}
 // Generated: ${new Date().toISOString()}

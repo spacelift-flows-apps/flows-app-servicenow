@@ -27,17 +27,25 @@ export const updateRequest: AppBlock = {
         },
         state: {
           name: "State",
-          description: "New state for the request item: `PENDING`, `WORK_IN_PROGRESS`, `COMPLETED`, `FAILED`, or `CANCELLED`.",
+          description:
+            "New state for the request item: `PENDING`, `WORK_IN_PROGRESS`, `COMPLETED`, `FAILED`, or `CANCELLED`.",
           type: {
             type: "string",
-            enum: ["PENDING", "WORK_IN_PROGRESS", "COMPLETED", "FAILED", "CANCELLED"],
+            enum: [
+              "PENDING",
+              "WORK_IN_PROGRESS",
+              "COMPLETED",
+              "FAILED",
+              "CANCELLED",
+            ],
           },
           required: true,
           default: "COMPLETED",
         },
         comments: {
           name: "Comments",
-          description: "Comments to add to the request item (visible to requester)",
+          description:
+            "Comments to add to the request item (visible to requester)",
           type: "string",
           required: false,
         },
@@ -49,7 +57,8 @@ export const updateRequest: AppBlock = {
         },
       },
       onEvent: async (input) => {
-        const { requestItemId, state, comments, workNotes } = input.event.inputConfig;
+        const { requestItemId, state, comments, workNotes } =
+          input.event.inputConfig;
         const { accessToken } = input.app.signals;
         const instanceUrl = input.app.config.instanceUrl;
 
@@ -69,7 +78,7 @@ export const updateRequest: AppBlock = {
         const stateValue = REQUEST_STATES[state as RequestState];
         if (stateValue === undefined) {
           throw new Error(
-            `Invalid state: ${state}. Valid states are: ${Object.keys(REQUEST_STATES).join(", ")}`
+            `Invalid state: ${state}. Valid states are: ${Object.keys(REQUEST_STATES).join(", ")}`,
           );
         }
 
@@ -101,7 +110,9 @@ export const updateRequest: AppBlock = {
           });
 
           if (response.status === 401) {
-            throw new Error("Authentication failed - please check ServiceNow credentials");
+            throw new Error(
+              "Authentication failed - please check ServiceNow credentials",
+            );
           }
 
           if (response.status === 403) {
@@ -114,7 +125,9 @@ export const updateRequest: AppBlock = {
 
           if (!response.ok) {
             const errorText = await response.text();
-            throw new Error(`Failed to update request: ${response.status} ${errorText}`);
+            throw new Error(
+              `Failed to update request: ${response.status} ${errorText}`,
+            );
           }
 
           const data = await response.json();
@@ -137,7 +150,7 @@ export const updateRequest: AppBlock = {
               requestItemId: requestItemId,
               error: error.message,
             },
-            { outputKey: "error" }
+            { outputKey: "error" },
           );
 
           throw error;

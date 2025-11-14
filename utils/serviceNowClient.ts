@@ -80,7 +80,7 @@ export interface RestMessageFunctionParams {
 export async function createTableRecord<T>(
   credentials: ServiceNowCredentials,
   resourceType: string,
-  payload: T
+  payload: T,
 ): Promise<CreatedResource> {
   const url = `${credentials.instanceUrl}/api/now/table/${resourceType}`;
 
@@ -95,22 +95,30 @@ export async function createTableRecord<T>(
   });
 
   if (response.status === 401) {
-    throw new Error("Authentication failed - please check your ServiceNow credentials");
+    throw new Error(
+      "Authentication failed - please check your ServiceNow credentials",
+    );
   }
 
   if (response.status === 403) {
-    throw new Error("Insufficient permissions - please verify ServiceNow user roles");
+    throw new Error(
+      "Insufficient permissions - please verify ServiceNow user roles",
+    );
   }
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to create ${resourceType}: ${response.status} ${errorText}`);
+    throw new Error(
+      `Failed to create ${resourceType}: ${response.status} ${errorText}`,
+    );
   }
 
   const data = await response.json();
 
   if (!data.result || !data.result.sys_id) {
-    throw new Error(`Invalid response from ServiceNow - missing sys_id in response`);
+    throw new Error(
+      `Invalid response from ServiceNow - missing sys_id in response`,
+    );
   }
 
   return {
@@ -125,7 +133,7 @@ export async function createTableRecord<T>(
 export async function deleteTableRecord(
   credentials: ServiceNowCredentials,
   resourceType: string,
-  resourceId: string
+  resourceId: string,
 ): Promise<void> {
   const url = `${credentials.instanceUrl}/api/now/table/${resourceType}/${resourceId}`;
 
@@ -139,17 +147,23 @@ export async function deleteTableRecord(
 
   // ServiceNow returns 404 if record doesn't exist - treat as success
   if (response.status === 404) {
-    console.log(`Resource ${resourceType}/${resourceId} not found - already deleted`);
+    console.log(
+      `Resource ${resourceType}/${resourceId} not found - already deleted`,
+    );
     return;
   }
 
   if (response.status === 401) {
-    throw new Error("Authentication failed - please check your ServiceNow credentials");
+    throw new Error(
+      "Authentication failed - please check your ServiceNow credentials",
+    );
   }
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Failed to delete ${resourceType}/${resourceId}: ${response.status} ${errorText}`);
+    throw new Error(
+      `Failed to delete ${resourceType}/${resourceId}: ${response.status} ${errorText}`,
+    );
   }
 }
 
@@ -158,7 +172,7 @@ export async function deleteTableRecord(
  */
 export async function lookupCategoryByName(
   credentials: ServiceNowCredentials,
-  categoryName: string
+  categoryName: string,
 ): Promise<string | null> {
   if (!categoryName) {
     return null;
@@ -175,7 +189,9 @@ export async function lookupCategoryByName(
   });
 
   if (!response.ok) {
-    console.warn(`Failed to lookup category "${categoryName}": ${response.status}`);
+    console.warn(
+      `Failed to lookup category "${categoryName}": ${response.status}`,
+    );
     return null;
   }
 
@@ -194,7 +210,7 @@ export async function lookupCategoryByName(
  */
 export async function createCatalogItem(
   credentials: ServiceNowCredentials,
-  params: CatalogItemParams
+  params: CatalogItemParams,
 ): Promise<CreatedResource> {
   const payload = {
     name: params.name,
@@ -215,7 +231,7 @@ export async function createCatalogItem(
  */
 export async function createVariable(
   credentials: ServiceNowCredentials,
-  params: VariableParams
+  params: VariableParams,
 ): Promise<CreatedResource> {
   const payload = {
     cat_item: params.catalogItemId,
@@ -235,7 +251,7 @@ export async function createVariable(
  */
 export async function createQuestionChoice(
   credentials: ServiceNowCredentials,
-  params: QuestionChoiceParams
+  params: QuestionChoiceParams,
 ): Promise<CreatedResource> {
   const payload = {
     question: params.questionId,
@@ -243,7 +259,11 @@ export async function createQuestionChoice(
     value: params.value,
   };
 
-  return createTableRecord(credentials, RESOURCE_TYPES.QUESTION_CHOICE, payload);
+  return createTableRecord(
+    credentials,
+    RESOURCE_TYPES.QUESTION_CHOICE,
+    payload,
+  );
 }
 
 /**
@@ -251,7 +271,7 @@ export async function createQuestionChoice(
  */
 export async function createBusinessRule(
   credentials: ServiceNowCredentials,
-  params: BusinessRuleParams
+  params: BusinessRuleParams,
 ): Promise<CreatedResource> {
   const payload = {
     name: params.name,
@@ -288,7 +308,7 @@ export function mapVariableType(type: string): ServiceNowVariableType {
  */
 export async function createRestMessage(
   credentials: ServiceNowCredentials,
-  params: RestMessageParams
+  params: RestMessageParams,
 ): Promise<CreatedResource> {
   const payload = {
     name: params.name,
@@ -305,7 +325,7 @@ export async function createRestMessage(
  */
 export async function createRestMessageFunction(
   credentials: ServiceNowCredentials,
-  params: RestMessageFunctionParams
+  params: RestMessageFunctionParams,
 ): Promise<CreatedResource> {
   const payload = {
     rest_message: params.restMessageId,
@@ -314,7 +334,11 @@ export async function createRestMessageFunction(
     http_method: params.httpMethod,
   };
 
-  return createTableRecord(credentials, RESOURCE_TYPES.REST_MESSAGE_FN, payload);
+  return createTableRecord(
+    credentials,
+    RESOURCE_TYPES.REST_MESSAGE_FN,
+    payload,
+  );
 }
 
 /**
@@ -323,7 +347,10 @@ export async function createRestMessageFunction(
 export function validateInstanceUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === "https:" && parsed.hostname.includes("service-now.com");
+    return (
+      parsed.protocol === "https:" &&
+      parsed.hostname.includes("service-now.com")
+    );
   } catch {
     return false;
   }
