@@ -37,9 +37,10 @@ export const app = defineApp({
      - **User ID**: spacelift_flows_integration
      - **First Name**: Spacelift Flows Integration
    - Add roles:
-     - \`catalog_admin\`
-     - \`web_service_admin\`
-     - \`business_rule_admin\`
+     - \`catalog_admin\` - for creating catalog items
+     - \`web_service_admin\` - for creating the authenticated REST message calling back to Flows
+     - \`business_rule_admin\` - for creating the business rule that calls back to Flows
+     - \`itil\` - for updating request item statuses
 
 3. **Create OAuth2 Integration in ServiceNow**:
    - Navigate to **System OAuth → Inbound Integrations**
