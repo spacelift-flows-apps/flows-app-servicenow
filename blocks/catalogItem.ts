@@ -24,6 +24,28 @@ interface CatalogVariable {
   options?: string[];
 }
 
+/**
+ * Idempotent sync step helper that stores results in KV storage.
+ * If the key already exists, returns the stored value.
+ * Otherwise, executes the callback, stores the result, and returns it.
+ * This makes onSync resilient to crashes - on retry, already-completed steps are skipped.
+ */
+async function syncStep<T>(key: string, callback: () => Promise<T>): Promise<T> {
+  const stored = await kv.block.get(key);
+
+  if (stored?.value !== undefined) {
+    console.log(`✓ Sync step "${key}" already completed, using cached result`);
+    return stored.value as T;
+  }
+
+  console.log(`Running sync step "${key}"...`);
+  const result = await callback();
+  await kv.block.set({ key, value: result });
+  console.log(`✓ Sync step "${key}" completed and cached`);
+
+  return result;
+}
+
 export const catalogItem: AppBlock = {
   name: "Catalog Item",
   description: "Creates a ServiceNow catalog item that triggers Flows when requested",
@@ -144,134 +166,153 @@ export const catalogItem: AppBlock = {
         accessToken: accessToken as string,
       };
 
-      // Check if already fully set up
-      const storedCatalogItemId = await kv.block.get("catalogItemId");
+      // 1. Look up category sys_id if category name provided (idempotent)
+      const categorySysId = await syncStep<string>("categorySysId", async () => {
+        const categoryNameOrId = (category as string) || "Services";
 
-      if (storedCatalogItemId?.value) {
-        // Already set up, just return ready
-        return {
-          newStatus: "ready",
-          signalUpdates: {
-            catalogItemId: storedCatalogItemId.value,
-            catalogItemUrl: `${instanceUrl}/sc_cat_item.do?sys_id=${storedCatalogItemId.value}`,
-          },
-        };
-      }
+        if (!categoryNameOrId) {
+          return "";
+        }
 
-      // Create all resources in one pass
-      console.log(`Creating catalog item: ${catalogItemName}`);
-      const createdResources: CreatedResource[] = [];
-
-      // 1. Look up category sys_id if category name provided
-      let categorySysId = "";
-      const categoryNameOrId = (category as string) || "Services"; // Default to "Services"
-
-      if (categoryNameOrId) {
-        console.log(`Looking up category: ${categoryNameOrId}`);
-        // First try to use it as-is (in case user provided sys_id directly)
         // If it looks like a sys_id (32 chars hex), use directly
         if (/^[a-f0-9]{32}$/i.test(categoryNameOrId)) {
-          categorySysId = categoryNameOrId;
-          console.log(`Using provided category sys_id: ${categorySysId}`);
-        } else {
-          // Look up by name
-          const lookedUpSysId = await lookupCategoryByName(credentials, categoryNameOrId);
-          if (lookedUpSysId) {
-            categorySysId = lookedUpSysId;
-            console.log(`✓ Category "${categoryNameOrId}" found: ${categorySysId}`);
-          } else {
-            console.warn(`Category "${categoryNameOrId}" not found, creating without category`);
-          }
+          console.log(`Using provided category sys_id: ${categoryNameOrId}`);
+          return categoryNameOrId;
         }
-      }
 
-      // 2. Create catalog item
-      const catalogItemResource = await createCatalogItem(credentials, {
-        name: catalogItemName as string,
-        description: catalogItemDescription as string,
-        category: categorySysId,
+        // Look up by name
+        const lookedUpSysId = await lookupCategoryByName(credentials, categoryNameOrId);
+        if (lookedUpSysId) {
+          console.log(`✓ Category "${categoryNameOrId}" found: ${lookedUpSysId}`);
+          return lookedUpSysId;
+        }
+
+        console.warn(`Category "${categoryNameOrId}" not found, creating without category`);
+        return "";
       });
-      createdResources.push(catalogItemResource);
-      console.log(`✓ Catalog item created: ${catalogItemResource.id}`);
 
-      // 3. Generate API credentials and create REST Message
-      const apiUser = `spacelift_flows_${input.block.id.substring(0, 8)}`;
-      const apiPassword = generateApiPassword();
+      // 2. Create catalog item (idempotent)
+      const catalogItemResource = await syncStep<CreatedResource>("catalogItemResource", async () => {
+        return await createCatalogItem(credentials, {
+          name: catalogItemName as string,
+          description: catalogItemDescription as string,
+          category: categorySysId,
+        });
+      });
+
+      // 3. Generate API credentials (idempotent)
+      const { apiUser, apiPassword } = await syncStep<{ apiUser: string; apiPassword: string }>(
+        "apiCredentials",
+        async () => {
+          return {
+            apiUser: `spacelift_flows_${input.block.id.substring(0, 8)}`,
+            apiPassword: generateApiPassword(),
+          };
+        }
+      );
+
       const restMessageName = `Spacelift_Flows_${input.block.id.substring(0, 8)}`;
 
-      console.log(`Creating REST Message: ${restMessageName}`);
-      const restMessageResource = await createRestMessage(credentials, {
-        name: restMessageName,
-        authUser: apiUser,
-        authPassword: apiPassword,
-      });
-      createdResources.push(restMessageResource);
-      console.log(`✓ REST Message created: ${restMessageResource.id}`);
-
-      // 4. Create REST Message Function
-      const restMessageFnName = "CallFlows";
-      console.log(`Creating REST Message Function: ${restMessageFnName}`);
-      const restMessageFnResource = await createRestMessageFunction(credentials, {
-        restMessageId: restMessageResource.id,
-        name: restMessageFnName,
-        endpoint: `${input.block.http?.url}/request`,
-        httpMethod: "POST",
-      });
-      createdResources.push(restMessageFnResource);
-      console.log(`✓ REST Message Function created: ${restMessageFnResource.id}`);
-
-      // 5. Create variables
-      console.log(`Creating ${(variables as CatalogVariable[]).length} variables`);
-      for (const variable of variables as CatalogVariable[]) {
-        const variableResource = await createVariable(credentials, {
-          catalogItemId: catalogItemResource.id,
-          name: variable.name,
-          type: mapVariableType(variable.type),
-          label: variable.label,
-          description: variable.description,
-          required: variable.required,
-          defaultValue: variable.default,
+      // 4. Create REST Message (idempotent)
+      const restMessageResource = await syncStep<CreatedResource>("restMessageResource", async () => {
+        return await createRestMessage(credentials, {
+          name: restMessageName,
+          authUser: apiUser,
+          authPassword: apiPassword,
         });
-        createdResources.push(variableResource);
+      });
 
-        // Create question choices for select variables
-        if (variable.type === "select" && variable.options && variable.options.length > 0) {
-          for (const option of variable.options) {
-            const choiceResource = await createQuestionChoice(credentials, {
-              questionId: variableResource.id,
-              value: option,
+      // 5. Create REST Message Function (idempotent)
+      const restMessageFnName = "CallFlows";
+      const restMessageFnResource = await syncStep<CreatedResource>(
+        "restMessageFnResource",
+        async () => {
+          return await createRestMessageFunction(credentials, {
+            restMessageId: restMessageResource.id,
+            name: restMessageFnName,
+            endpoint: `${input.block.http?.url}/request`,
+            httpMethod: "POST",
+          });
+        }
+      );
+
+      // 6. Create variables (idempotent for each variable)
+      const variableResources: CreatedResource[] = [];
+      const variablesArray = variables as CatalogVariable[];
+
+      for (let i = 0; i < variablesArray.length; i++) {
+        const variable = variablesArray[i];
+
+        const variableResource = await syncStep<CreatedResource>(
+          `variable-${i}-${variable.name}`,
+          async () => {
+            return await createVariable(credentials, {
+              catalogItemId: catalogItemResource.id,
+              name: variable.name,
+              type: mapVariableType(variable.type),
+              label: variable.label,
+              description: variable.description,
+              required: variable.required,
+              defaultValue: variable.default,
             });
-            createdResources.push(choiceResource);
+          }
+        );
+        variableResources.push(variableResource);
+
+        // Create question choices for select variables (idempotent for each choice)
+        if (variable.type === "select" && variable.options && variable.options.length > 0) {
+          for (let j = 0; j < variable.options.length; j++) {
+            const option = variable.options[j];
+            const choiceResource = await syncStep<CreatedResource>(
+              `variable-${i}-${variable.name}-choice-${j}`,
+              async () => {
+                return await createQuestionChoice(credentials, {
+                  questionId: variableResource.id,
+                  value: option,
+                });
+              }
+            );
+            variableResources.push(choiceResource);
           }
         }
       }
-      console.log(`✓ Created ${(variables as CatalogVariable[]).length} variables`);
 
-      // 6. Create business rule
-      console.log("Creating business rule");
-      const script = generateBusinessRuleScript({
-        catalogItemName: catalogItemName as string,
-        restMessageName,
-        restMessageFnName,
+      // 7. Create business rule (idempotent)
+      const businessRuleResource = await syncStep<CreatedResource>("businessRuleResource", async () => {
+        const script = generateBusinessRuleScript({
+          catalogItemName: catalogItemName as string,
+          restMessageName,
+          restMessageFnName,
+        });
+
+        return await createBusinessRule(credentials, {
+          name: `Spacelift Flows - ${catalogItemName}`,
+          catalogItemId: catalogItemResource.id,
+          script,
+        });
       });
 
-      const businessRuleResource = await createBusinessRule(credentials, {
-        name: `Spacelift Flows - ${catalogItemName}`,
-        catalogItemId: catalogItemResource.id,
-        script,
-      });
-      createdResources.push(businessRuleResource);
-      console.log(`✓ Business rule created: ${businessRuleResource.id}`);
+      // Build complete list of created resources for cleanup
+      const createdResources: CreatedResource[] = [
+        catalogItemResource,
+        restMessageResource,
+        restMessageFnResource,
+        ...variableResources,
+        businessRuleResource,
+      ];
 
-      // Store everything
-      await kv.block.setMany([
-        { key: "catalogItemId", value: catalogItemResource.id },
-        { key: "apiUser", value: apiUser },
-        { key: "apiPassword", value: apiPassword },
-        { key: "restMessageName", value: restMessageName },
-        { key: "restMessageFnName", value: restMessageFnName },
-        { key: "createdResources", value: createdResources },
-      ]);
+      // Store metadata for http handler and cleanup (idempotent)
+      await syncStep<boolean>("finalMetadataStorage", async () => {
+        await kv.block.setMany([
+          { key: "catalogItemId", value: catalogItemResource.id },
+          { key: "apiUser", value: apiUser },
+          { key: "apiPassword", value: apiPassword },
+          { key: "restMessageName", value: restMessageName },
+          { key: "restMessageFnName", value: restMessageFnName },
+          { key: "createdResources", value: createdResources },
+        ]);
+        return true;
+      });
 
       console.log("✓ Catalog item fully configured and ready");
 
@@ -296,15 +337,33 @@ export const catalogItem: AppBlock = {
     const instanceUrl = input.app.config.instanceUrl;
 
     if (!accessToken) {
-      // If no auth, just clean up local state
-      await kv.block.delete([
+      // If no auth, just clean up local state including syncStep keys
+      // We need to clean up all possible syncStep keys
+      const keysToDelete = [
         "catalogItemId",
         "apiUser",
         "apiPassword",
         "restMessageName",
         "restMessageFnName",
         "createdResources",
-      ]);
+        // syncStep keys
+        "categorySysId",
+        "catalogItemResource",
+        "apiCredentials",
+        "restMessageResource",
+        "restMessageFnResource",
+        "businessRuleResource",
+        "finalMetadataStorage",
+      ];
+
+      // Also clean up variable-related syncStep keys
+      // We don't know how many variables there were, so we'll list keys with prefix and delete
+      const allKeys = await kv.block.list({ keyPrefix: "variable-" });
+      for (const pair of allKeys.pairs) {
+        keysToDelete.push(pair.key);
+      }
+
+      await kv.block.delete(keysToDelete);
       return {
         newStatus: "drained",
         signalUpdates: {
@@ -344,15 +403,31 @@ export const catalogItem: AppBlock = {
         }
       }
 
-      // Clean up local storage
-      await kv.block.delete([
+      // Clean up local storage including syncStep keys
+      const keysToDelete = [
         "catalogItemId",
         "apiUser",
         "apiPassword",
         "restMessageName",
         "restMessageFnName",
         "createdResources",
-      ]);
+        // syncStep keys
+        "categorySysId",
+        "catalogItemResource",
+        "apiCredentials",
+        "restMessageResource",
+        "restMessageFnResource",
+        "businessRuleResource",
+        "finalMetadataStorage",
+      ];
+
+      // Also clean up variable-related syncStep keys
+      const allKeys = await kv.block.list({ keyPrefix: "variable-" });
+      for (const pair of allKeys.pairs) {
+        keysToDelete.push(pair.key);
+      }
+
+      await kv.block.delete(keysToDelete);
 
       return {
         newStatus: "drained",
