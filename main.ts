@@ -31,7 +31,7 @@ export const app = defineApp({
 
   installationInstructions: `To set up this ServiceNow app with OAuth2:
 
-1. **Enable Client Credentials Grant Type** (REQUIRED - Disabled by Default - details in a [ServiceNow knolwedge-base article](https://support.servicenow.com/kb?id=kb_article_view&sysparm_article=KB1645212) and [this article](https://www.servicenow.com/community/developer-blog/up-your-oauth2-0-game-inbound-client-credentials-with-washington/ba-p/2816891):
+1. **Enable Client Credentials Grant Type** (REQUIRED - Disabled by Default - details in a [ServiceNow knolwedge-base article](https://support.servicenow.com/kb?id=kb_article_view&sysparm_article=KB1645212) and [this article](https://www.servicenow.com/community/developer-blog/up-your-oauth2-0-game-inbound-client-credentials-with-washington/ba-p/2816891)):
    - Navigate to the System Properties table (click All in the upper left, then type in "sys_properties.list" and hit enter)
    - Search for: \`glide.oauth.inbound.client.credential.grant_type.enabled\`
    - Set value to **true**
