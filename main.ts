@@ -24,45 +24,40 @@ export const app = defineApp({
 
   installationInstructions: `To set up this ServiceNow app with OAuth2:
 
-1. **Enable Client Credentials Grant** (REQUIRED - Disabled by Default):
-   - Navigate to **System Properties → OAuth** (or search "sys_properties.list" in filter)
+1. **Enable Client Credentials Grant Type** (REQUIRED - Disabled by Default - details in a [ServiceNow knolwedge-base article](https://support.servicenow.com/kb?id=kb_article_view&sysparm_article=KB1645212) and [this article](https://www.servicenow.com/community/developer-blog/up-your-oauth2-0-game-inbound-client-credentials-with-washington/ba-p/2816891):
+   - Navigate to the System Properties table (click All in the upper left, then type in "sys_properties.list" and hit enter)
    - Search for: \`glide.oauth.inbound.client.credential.grant_type.enabled\`
    - Set value to **true**
    - Click **Save**
-   - ⚠️ This property is disabled by default on new ServiceNow instances!
+   - If not present, create it, with Type: **true/false**, Value: **true**
 
 2. **Create ServiceNow User for OAuth**:
    - Navigate to **User Administration → Users**
-   - Create new user (or use existing admin):
-     - **User ID**: spacelift_integration
-     - Add roles: \`rest_service\`, \`itil\`, \`catalog_admin\`, \`admin\`
-   - Click **Submit**
+   - Create new user (or use existing one):
+     - **User ID**: spacelift_flows_integration
+     - **First Name**: Spacelift Flows Integration
+   - Add roles:
+     - \`catalog_admin\`
+     - \`web_service_admin\`
+     - \`business_rule_admin\`
 
-3. **Create OAuth2 Integration in ServiceNow** (New Inbound Integration Experience):
-   - Navigate to **System OAuth → Integrations**
-   - Click **New** to create a new integration
+3. **Create OAuth2 Integration in ServiceNow**:
+   - Navigate to **System OAuth → Inbound Integrations**
+   - Click **New integration** to create a new integration
    - Select **OAuth - Client credentials grant** (for machine-to-machine access)
    - Fill in the integration details:
      - **Name**: Spacelift Flows Integration
-     - **Default Grant type**: Client Credentials
-     - **OAuth Application User**: ⚠️ Select the user from step 2 - REQUIRED!
-     - **Accessible from**: All application scopes
+     - **OAuth Application User**: Select the user from step 2
      - **Active**: ✓ (checked)
    - Click **Submit**
-   - **Important**: Copy the **Client ID** and **Client Secret** that are generated
+   - Copy the **Client ID** and **Client Secret** that are generated
 
 4. **Configure the Flows Installation**:
    - ServiceNow Instance URL: Your instance URL (e.g., https://dev12345.service-now.com)
      - **Important**: No trailing slash!
    - OAuth2 Client ID: From step 3
    - OAuth2 Client Secret: From step 3
-   - Click **Confirm** to save
-
-5. **Use the Integration**:
-   - The app will authenticate using client credentials grant (machine-to-machine)
-   - Add "Catalog Item Handler" blocks to create ServiceNow catalog items
-   - Each block creates a catalog item that triggers your Flows when requested
-   - No user account needed - purely API-based authentication`,
+   - Click **Save**, then **Confirm**.`,
 
   config: {
     instanceUrl: {

@@ -1,4 +1,4 @@
-import { AppBlock, events, kv, http, lifecycle } from "@slflows/sdk/v1";
+import { AppBlock, events, kv, http } from "@slflows/sdk/v1";
 import {
   createCatalogItem,
   createVariable,
@@ -13,7 +13,6 @@ import {
   type ServiceNowCredentials,
 } from "../utils/serviceNowClient";
 import { generateBusinessRuleScript } from "../templates/businessRule";
-import { randomUUID } from "node:crypto";
 
 interface CatalogVariable {
   name: string;
@@ -26,7 +25,7 @@ interface CatalogVariable {
 }
 
 export const catalogItem: AppBlock = {
-  name: "Catalog Item Handler",
+  name: "Catalog Item",
   description: "Creates a ServiceNow catalog item that triggers Flows when requested",
   category: "Service Catalog",
 
@@ -55,7 +54,7 @@ export const catalogItem: AppBlock = {
     },
     variables: {
       name: "Variables",
-      description: "Variables/parameters for the catalog item",
+      description: "Variables/parameters for the catalog item. Type can be one of `\"string\"`, `\"text\"`, `\"boolean\"`, `\"number\"`, `\"select\"`, or `\"password\"`.",
       fixed: true,
       type: {
         type: "array",

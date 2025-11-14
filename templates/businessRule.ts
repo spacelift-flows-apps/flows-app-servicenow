@@ -149,7 +149,6 @@ export function generateBusinessRuleScript(params: BusinessRuleTemplateParams): 
       if (success) {
         // Don't change state - leave as PENDING (1)
         requestItem.comments = 'Request submitted to Spacelift Flows for processing';
-        requestItem.work_notes = 'Waiting for workflow to process. Use the Update Request Status block to update status.';
         requestItem.update();
       } else {
         requestItem.state = FAILED_STATE;
