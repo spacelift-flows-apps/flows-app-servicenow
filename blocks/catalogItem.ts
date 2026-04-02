@@ -54,6 +54,7 @@ export const catalogItem: AppBlock = {
   description:
     "Creates a ServiceNow catalog item that triggers Flows when requested",
   category: "Service Catalog",
+  entrypoint: true,
 
   config: {
     catalogItemName: {
